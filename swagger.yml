@@ -2832,7 +2832,7 @@ definitions:
     description: A reference to another resource and links to interact with it
     type: object
     properties:
-      urlName:
+      entity:
         type: string
       id:
         type: string
@@ -3488,6 +3488,10 @@ definitions:
         $ref: '#/definitions/entityRef'
       username:
         type: string
+      details:
+        type: object
+        additionalProperties:
+          type: string
     example:
       id: 624fa53f-7629-4a7a-9e38-c1f4ce322c1d
       createdAt: '0001-01-01T00:00:00Z'
@@ -4503,20 +4507,3 @@ definitions:
         type: number
       totalCount:
         type: number
-
-
-
-# Things changed
-# - config, type -> entity ref
-# - authenticator, identity -> entity ref
-# - identity, ottca -> add caRef
-# - enrollments -> add username/caRef
-# - enrollment urls: accept ?method or /<method>
-# - services: configs listed as entity refs
-# - /identities/{id}/service-configs -> entity refs
-
-
-# Want to change
-# Service Policy: Dial/Bind to dial/bind
-# Semantic: AllOf AnyOf to anyOf allOf
-# associations of identity service configs should match other association types (i.e. service associations)
