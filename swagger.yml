@@ -204,8 +204,7 @@ paths:
     post:
       summary: Authenticate via a method supplied via a query string parameter
       description: |
-        Allows authentication against versions of Ziti that do not support /updb or /cert URL paths (< 0.13). Methods
-        that can be passed included `password` and `cert`.
+        Allows authentication  Methods include "password" and "cert"
       security: []
       tags:
         - Authentication
@@ -220,55 +219,6 @@ paths:
         '200':
           $ref: '#/responses/detailCurrentAPISession'
         '400':
-          $ref: '#/responses/badRequestResponse'
-        '403':
-          $ref: '#/responses/invalidAuthResponse'
-  '/authenticate/updb':
-    post:
-      summary: Authenticate via username and password
-      description: |
-        Allows authentication via a username and password combination. Identities can have zero or more authenticators
-        assigned to them. Enrollment processes create an initial authenticator and subsequent authenticators can be
-        administratively added.
-      security: []
-      tags:
-        - Authentication
-      operationId: authenticateUPDB
-      parameters:
-        - name: Body
-          in: body
-          required: true
-          schema:
-            $ref: '#/definitions/authenticateUPDB'
-      responses:
-        '200':
-          $ref: '#/responses/detailCurrentAPISession'
-        '400':
-          $ref: '#/responses/badRequestResponse'
-        '403':
-          $ref: '#/responses/invalidAuthResponse'
-  '/authenticate/cert':
-    post:
-      summary: Authenticate via a client certificate
-      description: |
-        Allows authentication via a client certificate that is exchanged during the TLS negotiation of HTTPS. Identities
-        can have zero or more authenticators assigned to them. Enrollment processes create an initial authenticator and
-        subsequent authenticators can be administratively added.
-      security: []
-      tags:
-        - Authentication
-      operationId: authenticateCert
-      parameters:
-        - name: Body
-          in: body
-          required: true
-          schema:
-            $ref: '#/definitions/authenticateCert'
-      responses:
-        '200':
-          $ref: '#/responses/detailCurrentAPISession'
-        '400':
-
           $ref: '#/responses/badRequestResponse'
         '403':
           $ref: '#/responses/invalidAuthResponse'
