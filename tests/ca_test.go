@@ -258,7 +258,7 @@ func Test_CA(t *testing.T) {
 			ctx.Req.Empty(enrolledSession)
 		})
 
-		t.Run("CAs with auth re-enabled an authenticate", func(t *testing.T) {
+		t.Run("CAs with auth re-enabled can authenticate", func(t *testing.T) {
 			ctx.testContextChanged(t)
 			ca.isAuthEnabled = true
 			resp := ctx.AdminSession.patchEntity(ca, "isAuthEnabled")
@@ -272,13 +272,21 @@ func Test_CA(t *testing.T) {
 		})
 
 		t.Run("deleting a CA no longer allows authentication", func(t *testing.T) {
+			t.Skip("skipping till edge#311")
 			ctx.testContextChanged(t)
+
+			beforeDeleteSession, err := clientAuthenticator.Authenticate(ctx)
+
 			ctx.AdminSession.requireDeleteEntity(ca)
 
-			enrolledSession, err := clientAuthenticator.Authenticate(ctx)
+			afterDeleteSession, err := clientAuthenticator.Authenticate(ctx)
 
 			ctx.Req.Error(err)
-			ctx.Req.Empty(enrolledSession)
+			ctx.Req.Empty(afterDeleteSession)
+
+			t.Run("sessions authenticated through a deleted CA are also deleted", func(t *testing.T) {
+				ctx.Req.False(beforeDeleteSession.Exists())
+			})
 		})
 	})
 }

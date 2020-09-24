@@ -200,6 +200,16 @@ func (sess *session) parseSessionInfoFromResponse(ctx *TestContext, response *re
 	return nil
 }
 
+func (sess *session) Exists() bool {
+	resp, err := sess.newRequest(sess.testContext).Get("/current-api-session")
+
+	if err != nil {
+		return false
+	}
+
+	return resp.StatusCode() == http.StatusOK
+}
+
 func (sess *session) logout() error {
 	resp, err := sess.newRequest(sess.testContext).Delete("/current-api-session")
 
