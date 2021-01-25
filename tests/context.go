@@ -269,7 +269,9 @@ func (ctx *TestContext) createAndEnrollEdgeRouter(roleAttributes ...string) *edg
 
 	enroller := enroll.NewRestEnroller()
 	ctx.Req.NoError(enroller.LoadConfig(cfgmap))
-	ctx.Req.NoError(enroller.Enroll([]byte(jwt), true, ""))
+	var keyAlg sdkconfig.KeyAlgVar
+	keyAlg.Set("RSA")
+	ctx.Req.NoError(enroller.Enroll([]byte(jwt), true, "", keyAlg))
 
 	return ctx.edgeRouterEntity
 }
@@ -291,7 +293,9 @@ func (ctx *TestContext) createAndEnrollTransitRouter() *transitRouter {
 
 	enroller := enroll.NewRestEnroller()
 	ctx.Req.NoError(enroller.LoadConfig(cfgmap))
-	ctx.Req.NoError(enroller.Enroll([]byte(jwt), true, ""))
+	var keyAlg sdkconfig.KeyAlgVar
+	keyAlg.Set("RSA")
+	ctx.Req.NoError(enroller.Enroll([]byte(jwt), true, "", keyAlg))
 
 	return ctx.transitRouterEntity
 }
@@ -340,7 +344,7 @@ func (ctx *TestContext) EnrollIdentity(identityId string) *sdkconfig.Config {
 
 	flags := sdkenroll.EnrollmentFlags{
 		Token:  tkn,
-		KeyAlg: "EC",
+		KeyAlg: "RSA",
 	}
 	conf, err := sdkenroll.Enroll(flags)
 	ctx.Req.NoError(err)

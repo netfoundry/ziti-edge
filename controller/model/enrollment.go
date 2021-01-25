@@ -71,6 +71,7 @@ type EnrollmentContext interface {
 	GetCerts() []*x509.Certificate
 	GetHeaders() map[string]interface{}
 	GetMethod() string
+	GetUsername() string
 }
 
 type EnrollmentContextHttp struct {
@@ -80,6 +81,7 @@ type EnrollmentContextHttp struct {
 	Certs      []*x509.Certificate
 	Token      string
 	Method     string
+	Username   string
 }
 
 func (context *EnrollmentContextHttp) GetToken() string {
@@ -106,6 +108,10 @@ func (context *EnrollmentContextHttp) GetDataAsMap() map[string]interface{} {
 
 func (context *EnrollmentContextHttp) GetMethod() string {
 	return context.Method
+}
+
+func (context *EnrollmentContextHttp) GetUsername() string {
+	return context.Username
 }
 
 func (context *EnrollmentContextHttp) GetDataAsByteArray() []byte {
@@ -137,6 +143,8 @@ func (context *EnrollmentContextHttp) FillFromHttpRequest(request *http.Request)
 			context.Token = value[0]
 		} else if key == "method" {
 			context.Method = value[0]
+		} else if key == "username" {
+			context.Username = value[0]
 		}
 	}
 

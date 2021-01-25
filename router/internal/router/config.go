@@ -186,7 +186,7 @@ func (config *Config) loadListener(rootConfigMap map[interface{}]interface{}) er
 	}
 
 	var edgeBinding map[interface{}]interface{}
-	var edgeWssBinding map[interface{}]interface{}
+	var edgeWsBinding map[interface{}]interface{}
 
 	for i, value := range listeners {
 		submap := value.(map[interface{}]interface{})
@@ -210,15 +210,15 @@ func (config *Config) loadListener(rootConfigMap map[interface{}]interface{}) er
 						return errors.New("required value [listeners.edge.address] was not a valid address")
 					}
 					tokens := strings.Split(address, ":")
-					if tokens[0] == "wss" {
-						if edgeWssBinding != nil {
-							return errors.New("multiple edge listeners found in [listeners], only one 'wss' address is allowed")
+					if tokens[0] == "ws" {
+						if edgeWsBinding != nil {
+							return errors.New("multiple edge listeners found in [listeners], only one 'ws' address is allowed")
 						}
-						edgeWssBinding = submap
+						edgeWsBinding = submap
 
 					} else {
 						if edgeBinding != nil {
-							return errors.New("multiple edge listeners found in [listeners], only one non-'wss' is allowed")
+							return errors.New("multiple edge listeners found in [listeners], only one non-'ws' is allowed")
 						}
 						edgeBinding = submap
 					}
@@ -229,7 +229,7 @@ func (config *Config) loadListener(rootConfigMap map[interface{}]interface{}) er
 		}
 	}
 
-	if (edgeBinding == nil) && (edgeWssBinding == nil) {
+	if (edgeBinding == nil) && (edgeWsBinding == nil) {
 		return errors.New("required binding [edge] not found in [listeners]")
 	}
 
@@ -258,8 +258,8 @@ func (config *Config) loadListener(rootConfigMap map[interface{}]interface{}) er
 		}
 	}
 
-	if edgeWssBinding != nil {
-		if value, found := edgeWssBinding["options"]; found {
+	if edgeWsBinding != nil {
+		if value, found := edgeWsBinding["options"]; found {
 			submap := value.(map[interface{}]interface{})
 
 			if submap == nil {

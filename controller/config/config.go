@@ -45,10 +45,15 @@ type Enrollment struct {
 	SigningCertCaPem  []byte
 	EdgeIdentity      EnrollmentOption
 	EdgeRouter        EnrollmentOption
+	OtfIdentity       OtfEnrollmentOption
 }
 
 type EnrollmentOption struct {
 	DurationMinutes time.Duration
+}
+
+type OtfEnrollmentOption struct {
+	DurationMinutes int
 }
 
 type Api struct {
@@ -61,12 +66,32 @@ type Api struct {
 	HttpTimeouts          HttpTimeouts
 }
 
+type WSApi struct {
+	SessionTimeoutSeconds time.Duration
+	Listener              string
+	Advertise             string
+	Identity              identity.Identity
+	IdentityConfig        identity.IdentityConfig
+	IdentityCaPem         []byte
+	WriteTimeout          time.Duration
+	ReadTimeout           time.Duration
+	IdleTimeout           time.Duration
+	PongTimeout           time.Duration
+	PingInterval          time.Duration
+	HandshakeTimeout      time.Duration
+	ReadBufferSize        int
+	WriteBufferSize       int
+	EnableCompression     bool
+	Valid                 bool
+}
+
 type Config struct {
 	RootIdentityConfig identity.IdentityConfig
 	RootIdentity       identity.Identity
 	RootIdentityCaPem  []byte
 	Enabled            bool
 	Api                Api
+	WSApi              WSApi
 	Enrollment         Enrollment
 	caPems             [][]byte
 	caPemsBuf          []byte
@@ -210,7 +235,7 @@ func (c *Config) loadApiSection(edgeConfigMap map[interface{}]interface{}) error
 			apiIdentitySubMap = value.(map[interface{}]interface{})
 		}
 
-		if err = c.loadIApiIdentity(apiIdentitySubMap); err != nil {
+		if err = c.loadAPIIdentity(apiIdentitySubMap, &c.Api); err != nil {
 			return fmt.Errorf("error loading Edge API Identity: %s", err)
 		}
 
@@ -225,9 +250,120 @@ func (c *Config) loadApiSection(edgeConfigMap map[interface{}]interface{}) error
 	return nil
 }
 
-func (c *Config) loadIApiIdentity(apiIdentitySubMap map[interface{}]interface{}) error {
+func (c *Config) loadWSApiSection(edgeConfigMap map[interface{}]interface{}) error {
+	c.WSApi = WSApi{}
+	var err error
+
+	if value, found := edgeConfigMap["wsapi"]; found {
+		submap := value.(map[interface{}]interface{})
+
+		if value, found := submap["listener"]; found {
+			c.WSApi.Listener = value.(string)
+		} else {
+			return errors.New("required configuration value [edge.wsapi.listener] missing")
+		}
+
+		if value, found := submap["advertise"]; found {
+			c.WSApi.Advertise = value.(string)
+		} else {
+			return errors.New("required configuration value [edge.wsapi.advertise] missing")
+		}
+
+		var intValue = 0
+		if value, found := submap["sessionTimeoutMinutes"]; found {
+			intValue = value.(int)
+		}
+
+		if intValue < sessionTimeoutMin {
+			intValue = sessionTimeoutDefault
+			pfxlog.Logger().Warn("[edge.wsapi.sessionTimeout] defaulted to " + strconv.Itoa(intValue))
+		}
+
+		c.WSApi.SessionTimeoutSeconds = time.Duration(intValue) * time.Minute
+
+		var wsapiIdentitySubMap map[interface{}]interface{}
+		if value, found = submap["identity"]; found {
+			wsapiIdentitySubMap = value.(map[interface{}]interface{})
+		}
+
+		if err = c.loadWSAPIIdentity(wsapiIdentitySubMap, &c.WSApi); err != nil {
+			return fmt.Errorf("error loading Edge WSAPI Identity: %s", err)
+		}
+
+		if v, found := submap["writeTimeout"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.WriteTimeout = time.Second * time.Duration(i)
+			} else {
+				return errors.New("invalid 'writeTimeout' value")
+			}
+		}
+		if v, found := submap["readTimeout"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.ReadTimeout = time.Second * time.Duration(i)
+			} else {
+				return errors.New("invalid 'readTimeout' value")
+			}
+		}
+		if v, found := submap["idleTimeout"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.IdleTimeout = time.Second * time.Duration(i)
+			} else {
+				return errors.New("invalid 'idleTimeout' value")
+			}
+		}
+		if v, found := submap["pongTimeout"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.PongTimeout = time.Second * time.Duration(i)
+			} else {
+				return errors.New("invalid 'pongTimeout' value")
+			}
+		}
+		if v, found := submap["pingInterval"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.PingInterval = time.Second * time.Duration(i)
+			} else {
+				return errors.New("invalid 'pingInterval' value")
+			}
+		} else {
+			c.WSApi.PingInterval = (c.WSApi.PongTimeout * 9) / 10
+		}
+		if v, found := submap["handshakeTimeout"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.HandshakeTimeout = time.Second * time.Duration(i)
+			} else {
+				return errors.New("invalid 'handshakeTimeout' value")
+			}
+		}
+		if v, found := submap["readBufferSize"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.ReadBufferSize = i
+			} else {
+				return errors.New("invalid 'readBufferSize' value")
+			}
+		}
+		if v, found := submap["writeBufferSize"]; found {
+			if i, ok := v.(int); ok {
+				c.WSApi.WriteBufferSize = i
+			} else {
+				return errors.New("invalid 'writeBufferSize' value")
+			}
+		}
+		if v, found := submap["enableCompression"]; found {
+			if i, ok := v.(bool); ok {
+				c.WSApi.EnableCompression = i
+			} else {
+				return errors.New("invalid 'enableCompression' value")
+			}
+		}
+		c.WSApi.Valid = true
+	}
+
+	return nil
+}
+
+func (c *Config) loadAPIIdentity(apiIdentitySubMap map[interface{}]interface{}, api *Api) error {
 	//default to root identity value
-	c.Api.IdentityConfig = identity.IdentityConfig{
+	api.IdentityConfig = identity.IdentityConfig{
 		Key:        c.RootIdentityConfig.Key,
 		Cert:       c.RootIdentityConfig.Cert,
 		ServerCert: c.RootIdentityConfig.ServerCert,
@@ -259,7 +395,46 @@ func (c *Config) loadIApiIdentity(apiIdentitySubMap map[interface{}]interface{})
 	}
 
 	var err error
-	c.Api.Identity, err = identity.LoadIdentity(c.Api.IdentityConfig)
+	api.Identity, err = identity.LoadIdentity(api.IdentityConfig)
+
+	return err
+}
+
+func (c *Config) loadWSAPIIdentity(wsapiIdentitySubMap map[interface{}]interface{}, wsapi *WSApi) error {
+	//default to root identity value
+	wsapi.IdentityConfig = identity.IdentityConfig{
+		Key:        c.RootIdentityConfig.Key,
+		Cert:       c.RootIdentityConfig.Cert,
+		ServerCert: c.RootIdentityConfig.ServerCert,
+		ServerKey:  c.RootIdentityConfig.ServerKey,
+		CA:         c.RootIdentityConfig.CA,
+	}
+
+	if wsapiIdentitySubMap != nil {
+		if value, found := wsapiIdentitySubMap["server_cert"]; found {
+			c.WSApi.IdentityConfig.ServerCert = value.(string)
+		} else {
+			return fmt.Errorf("configuration value [edge.api.identity.server_cert] is required if [edge.api.identity] is specified")
+		}
+
+		if value, found := wsapiIdentitySubMap["server_key"]; found {
+			c.WSApi.IdentityConfig.ServerKey = value.(string)
+		} else {
+			return fmt.Errorf("configuration value [edge.api.identity.server_key] is required if [edge.api.identity] is specified")
+		}
+
+		if value, found := wsapiIdentitySubMap["ca"]; found {
+			c.WSApi.IdentityConfig.CA = value.(string)
+			var err error
+			if c.WSApi.IdentityCaPem, err = ioutil.ReadFile(c.Api.IdentityConfig.CA); err != nil {
+				return fmt.Errorf("could not read file CA file from [edge.api.identity.ca]")
+			}
+			c.caPems = append(c.caPems, c.WSApi.IdentityCaPem)
+		}
+	}
+
+	var err error
+	wsapi.Identity, err = identity.LoadIdentity(wsapi.IdentityConfig)
 
 	return err
 }
@@ -346,6 +521,23 @@ func (c *Config) loadEnrollmentSection(edgeConfigMap map[interface{}]interface{}
 
 		} else {
 			return errors.New("required configuration section [edge.enrollment.edgeRouter] missing")
+		}
+
+		c.Enrollment.OtfIdentity = OtfEnrollmentOption{DurationMinutes: 720} // default
+		if value, found := submap["otfIdentity"]; found {
+			if value != nil {
+				submap := value.(map[interface{}]interface{})
+
+				var otfIdentityDurationInt = 0
+				if value, found := submap["durationMinutes"]; found {
+					otfIdentityDurationInt = value.(int)
+				}
+
+				c.Enrollment.OtfIdentity = OtfEnrollmentOption{DurationMinutes: otfIdentityDurationInt}
+			}
+
+			// } else {
+			// c.Enrollment.OtfIdentity = OtfEnrollmentOption{DurationMinutes: 720}
 		}
 
 	} else {
@@ -444,6 +636,10 @@ func LoadFromMap(cfgmap map[interface{}]interface{}) (*Config, error) {
 	}
 
 	if err = edgeConfig.loadApiSection(edgeConfigMap); err != nil {
+		return nil, err
+	}
+
+	if err = edgeConfig.loadWSApiSection(edgeConfigMap); err != nil {
 		return nil, err
 	}
 

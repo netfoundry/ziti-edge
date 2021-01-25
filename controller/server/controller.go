@@ -51,6 +51,7 @@ import (
 type Controller struct {
 	config          *edgeconfig.Config
 	apiServer       *apiServer
+	wsapiServer     *wsapiServer
 	AppEnv          *env.AppEnv
 	xmgmt           *submgmt
 	xctrl           *subctrl
@@ -162,6 +163,7 @@ func (c *Controller) initializeAuthModules() {
 
 		c.AppEnv.EnrollRegistry.Add(model.NewEnrollModuleCa(c.AppEnv))
 		c.AppEnv.EnrollRegistry.Add(model.NewEnrollModuleOttCa(c.AppEnv))
+		c.AppEnv.EnrollRegistry.Add(model.NewEnrollModuleOtf(c.AppEnv))
 		c.AppEnv.EnrollRegistry.Add(model.NewEnrollModuleOtt(c.AppEnv))
 		c.AppEnv.EnrollRegistry.Add(model.NewEnrollModuleEdgeRouterOtt(c.AppEnv))
 		c.AppEnv.EnrollRegistry.Add(model.NewEnrollModuleTransitRouterOtt(c.AppEnv))
@@ -293,6 +295,13 @@ func (c *Controller) Run() {
 	as.corsOptions = corsOpts
 	c.apiServer = as
 
+	if c.config.WSApi.Valid {
+		wsas := newWSApiServer(c.config, c.AppEnv, timeoutHandler)
+		c.wsapiServer = wsas
+	} else {
+		log.Info("no WSApi config specified -- start of WSApi server is bypassed")
+	}
+
 	admin, err := c.AppEnv.Handlers.Identity.ReadDefaultAdmin()
 
 	if err != nil {
@@ -312,6 +321,18 @@ func (c *Controller) Run() {
 				Fatal("error starting API server", err)
 		}
 	}()
+
+	if c.config.WSApi.Valid {
+		go func() {
+			err := c.wsapiServer.Start()
+
+			if err != nil {
+				log.
+					WithField("cause", err).
+					Fatal("error starting WSAPI server", err)
+			}
+		}()
+	}
 
 	go func() {
 		err := c.policyEngine.Start()

@@ -2280,6 +2280,31 @@ func init() {
         }
       ]
     },
+    "/enroll/otf": {
+      "post": {
+        "description": "Enroll an identity On-The-Fly. This enrollment method expects a PEM encoded CSR to be provided for fulfillment. \nIt is up to the enrolling identity to manage the private key backing the CSR request.\n",
+        "consumes": [
+          "application/x-pem-file"
+        ],
+        "produces": [
+          "application/x-pem-file",
+          "application/json"
+        ],
+        "tags": [
+          "Enroll"
+        ],
+        "summary": "Enroll an identity On-The-Fly",
+        "operationId": "enrollOtf",
+        "responses": {
+          "200": {
+            "$ref": "#/responses/zitiSignedCert"
+          },
+          "404": {
+            "$ref": "#/responses/notFoundResponse"
+          }
+        }
+      }
+    },
     "/enroll/ott": {
       "post": {
         "description": "Enroll an identity via a one-time-token which is supplied via a query string parameter. This enrollment method\nexpects a PEM encoded CSRs to be provided for fulfillment. It is up to the enrolling identity to manage the\nprivate key backing the CSR request.\n",
@@ -2311,7 +2336,7 @@ func init() {
     },
     "/enroll/ottca": {
       "post": {
-        "description": "Enroll an identity via a one-time-token that also requires a pre-exchanged client certificate to match a\nCertificate Authority that has been added and verified (See POST /cas and POST /cas{id}/verify). The client\nmust present a client certificate signed by CA associated with the enrollment. This enrollment is similar to\nCA auto enrollment except that is required the identity to be pre-created.\n\nAs the client certificat has been pre-exchanged there is no CSR input to this enrollment method.\n",
+        "description": "Enroll an identity via a one-time-token that also requires a pre-exchanged client certificate to match a\nCertificate Authority that has been added and verified (See POST /cas and POST /cas{id}/verify). The client\nmust present a client certificate signed by CA associated with the enrollment. This enrollment is similar to\nCA auto enrollment except that is required the identity to be pre-created.\n\nAs the client certificate has been pre-exchanged there is no CSR input to this enrollment method.\n",
         "tags": [
           "Enroll"
         ],
@@ -2335,7 +2360,7 @@ func init() {
         "tags": [
           "Enroll"
         ],
-        "summary": "Enroll an identity vvia one-time-token",
+        "summary": "Enroll an identity via one-time-token",
         "operationId": "ernollUpdb",
         "responses": {
           "200": {
@@ -13492,6 +13517,347 @@ func init() {
                   "message": "The supplied request contains an invalid document",
                   "requestId": "ac6766d6-3a09-44b3-8d8a-1b541d97fdd9"
                 },
+                "meta": {}
+              }
+            }
+          },
+          "401": {
+            "description": "The currently supplied session does not have the correct access rights to request this resource",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {}
+                  },
+                  "cause": "",
+                  "causeMessage": "",
+                  "code": "UNAUTHORIZED",
+                  "message": "The request could not be completed. The session is not authorized or the credentials are invalid",
+                  "requestId": "0bfe7a04-9229-4b7a-812c-9eb3cc0eac0f"
+                },
+                "meta": {
+                  "apiEnrolmentVersion": "0.0.1",
+                  "apiVersion": "0.0.1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "ztSession": []
+          }
+        ],
+        "description": "Terminates the current API session",
+        "tags": [
+          "Current API Session"
+        ],
+        "summary": "Logout",
+        "responses": {
+          "200": {
+            "description": "Base empty response",
+            "schema": {
+              "$ref": "#/definitions/empty"
+            }
+          },
+          "401": {
+            "description": "The currently supplied session does not have the correct access rights to request this resource",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {}
+                  },
+                  "cause": "",
+                  "causeMessage": "",
+                  "code": "UNAUTHORIZED",
+                  "message": "The request could not be completed. The session is not authorized or the credentials are invalid",
+                  "requestId": "0bfe7a04-9229-4b7a-812c-9eb3cc0eac0f"
+                },
+                "meta": {
+                  "apiEnrolmentVersion": "0.0.1",
+                  "apiVersion": "0.0.1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/current-api-session/certificates": {
+      "get": {
+        "security": [
+          {
+            "ztSession": []
+          }
+        ],
+        "description": "Retrieves a list of certificate resources for the current API session; supports filtering, sorting, and pagination",
+        "tags": [
+          "Current API Session"
+        ],
+        "summary": "List the ephemeral certificates available for the current API Session",
+        "operationId": "listCurrentApiSessionCertificates",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "name": "filter",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of the current API Session's certificate",
+            "schema": {
+              "$ref": "#/definitions/listCurrentAPISessionCertificatesEnvelope"
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "ztSession": []
+          }
+        ],
+        "description": "Creates an ephemeral certificate for the current API Session. This endpoint expects a PEM encoded CSRs to be provided for fulfillment as a property of a JSON payload. It is up to the client to manage the private key backing the CSR request.",
+        "tags": [
+          "Current API Session"
+        ],
+        "summary": "Creates an ephemeral certificate for the current API Session",
+        "operationId": "createCurrentApiSessionCertificate",
+        "parameters": [
+          {
+            "description": "The payload describing the CSR used to create a session certificate",
+            "name": "Body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/currentApiSessionCertificateCreate"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A response of a create API Session certificate",
+            "schema": {
+              "$ref": "#/definitions/createCurrentApiSessionCertificateEnvelope"
+            }
+          },
+          "400": {
+            "description": "The supplied request contains invalid fields or could not be parsed (json and non-json bodies). The error's code, message, and cause fields can be inspected for further information",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {}
+                  },
+                  "cause": {
+                    "details": {
+                      "context": "(root)",
+                      "field": "(root)",
+                      "property": "fooField3"
+                    },
+                    "field": "(root)",
+                    "message": "(root): fooField3 is required",
+                    "type": "required",
+                    "value": {
+                      "fooField": "abc",
+                      "fooField2": "def"
+                    }
+                  },
+                  "causeMessage": "schema validation failed",
+                  "code": "COULD_NOT_VALIDATE",
+                  "message": "The supplied request contains an invalid document",
+                  "requestId": "ac6766d6-3a09-44b3-8d8a-1b541d97fdd9"
+                },
+                "meta": {
+                  "apiEnrolmentVersion": "0.0.1",
+                  "apiVersion": "0.0.1"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The currently supplied session does not have the correct access rights to request this resource",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {}
+                  },
+                  "cause": "",
+                  "causeMessage": "",
+                  "code": "UNAUTHORIZED",
+                  "message": "The request could not be completed. The session is not authorized or the credentials are invalid",
+                  "requestId": "0bfe7a04-9229-4b7a-812c-9eb3cc0eac0f"
+                },
+                "meta": {
+                  "apiEnrolmentVersion": "0.0.1",
+                  "apiVersion": "0.0.1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/current-api-session/certificates/{id}": {
+      "get": {
+        "security": [
+          {
+            "ztSession": []
+          }
+        ],
+        "description": "Retrieves a single ephemeral certificate by id",
+        "tags": [
+          "Current API Session"
+        ],
+        "summary": "Retrieves an ephemeral certificate",
+        "operationId": "detailCurrentApiSessionCertificate",
+        "responses": {
+          "200": {
+            "description": "A response containing a single API Session certificate",
+            "schema": {
+              "$ref": "#/definitions/detailCurrentApiSessionCertificateEnvelope"
+            }
+          },
+          "401": {
+            "description": "The currently supplied session does not have the correct access rights to request this resource",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {}
+                  },
+                  "cause": "",
+                  "causeMessage": "",
+                  "code": "UNAUTHORIZED",
+                  "message": "The request could not be completed. The session is not authorized or the credentials are invalid",
+                  "requestId": "0bfe7a04-9229-4b7a-812c-9eb3cc0eac0f"
+                },
+                "meta": {
+                  "apiEnrolmentVersion": "0.0.1",
+                  "apiVersion": "0.0.1"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource does not exist",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {
+                      "id": "71a3000f-7dda-491a-9b90-a19f4ee6c406"
+                    }
+                  },
+                  "cause": null,
+                  "causeMessage": "",
+                  "code": "NOT_FOUND",
+                  "message": "The resource requested was not found or is no longer available",
+                  "requestId": "270908d6-f2ef-4577-b973-67bec18ae376"
+                },
+                "meta": {
+                  "apiEnrolmentVersion": "0.0.1",
+                  "apiVersion": "0.0.1"
+                }
+              }
+            }
+          }
+        }
+      },
+      "parameters": [
+        {
+          "type": "string",
+          "description": "The id of the requested resource",
+          "name": "id",
+          "in": "path",
+          "required": true
+        }
+      ]
+    },
+    "/current-api-session/service-updates": {
+      "get": {
+        "security": [
+          {
+            "ztSession": []
+          }
+        ],
+        "description": "Retrieves data indicating the last time data relevant to this API Session was altered that would necessitate\nservice refreshes.\n",
+        "tags": [
+          "Current API Session",
+          "Services"
+        ],
+        "summary": "Returns data indicating whether a client should updates it service list",
+        "operationId": "listServiceUpdates",
+        "responses": {
+          "200": {
+            "description": "Data indicating necessary service updates",
+            "schema": {
+              "$ref": "#/definitions/listCurrentApiSessionServiceUpdatesEnvelope"
+            }
+          },
+          "400": {
+            "description": "The supplied request contains invalid fields or could not be parsed (json and non-json bodies). The error's code, message, and cause fields can be inspected for further information",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {}
+                  },
+                  "cause": {
+                    "details": {
+                      "context": "(root)",
+                      "field": "(root)",
+                      "property": "fooField3"
+                    },
+                    "field": "(root)",
+                    "message": "(root): fooField3 is required",
+                    "type": "required",
+                    "value": {
+                      "fooField": "abc",
+                      "fooField2": "def"
+                    }
+                  },
+                  "causeMessage": "schema validation failed",
+                  "code": "COULD_NOT_VALIDATE",
+                  "message": "The supplied request contains an invalid document",
+                  "requestId": "ac6766d6-3a09-44b3-8d8a-1b541d97fdd9"
+                },
                 "meta": {
                   "apiEnrolmentVersion": "0.0.1",
                   "apiVersion": "0.0.1"
@@ -13534,54 +13900,6 @@ func init() {
           "required": true
         }
       ]
-    },
-    "/current-api-session/service-updates": {
-      "get": {
-        "security": [
-          {
-            "ztSession": []
-          }
-        ],
-        "description": "Retrieves data indicating the last time data relevant to this API Session was altered that would necessitate\nservice refreshes.\n",
-        "tags": [
-          "Current API Session",
-          "Services"
-        ],
-        "summary": "Returns data indicating whether a client should updates it service list",
-        "operationId": "listServiceUpdates",
-        "responses": {
-          "200": {
-            "description": "Data indicating necessary service updates",
-            "schema": {
-              "$ref": "#/definitions/listCurrentApiSessionServiceUpdatesEnvelope"
-            }
-          },
-          "401": {
-            "description": "The currently supplied session does not have the correct access rights to request this resource",
-            "schema": {
-              "$ref": "#/definitions/apiErrorEnvelope"
-            },
-            "examples": {
-              "application/json": {
-                "error": {
-                  "args": {
-                    "urlVars": {}
-                  },
-                  "cause": "",
-                  "causeMessage": "",
-                  "code": "UNAUTHORIZED",
-                  "message": "The request could not be completed. The session is not authorized or the credentials are invalid",
-                  "requestId": "0bfe7a04-9229-4b7a-812c-9eb3cc0eac0f"
-                },
-                "meta": {
-                  "apiEnrolmentVersion": "0.0.1",
-                  "apiVersion": "0.0.1"
-                }
-              }
-            }
-          }
-        }
-      }
     },
     "/current-identity": {
       "get": {
@@ -16186,6 +16504,60 @@ func init() {
         }
       ]
     },
+    "/enroll/otf": {
+      "post": {
+        "description": "Enroll an identity On-The-Fly. This enrollment method expects a PEM encoded CSR to be provided for fulfillment. \nIt is up to the enrolling identity to manage the private key backing the CSR request.\n",
+        "consumes": [
+          "application/x-pem-file"
+        ],
+        "produces": [
+          "application/json",
+          "application/x-pem-file"
+        ],
+        "tags": [
+          "Enroll"
+        ],
+        "summary": "Enroll an identity On-The-Fly",
+        "operationId": "enrollOtf",
+        "responses": {
+          "200": {
+            "description": "A PEM encoded certificate signed by the internal Ziti CA",
+            "schema": {
+              "type": "string"
+            },
+            "examples": {
+              "application/x-x509-user-cert": "-----BEGIN CERTIFICATE-----\nMIICzDCCAlGgAwIBAgIRAPkVg1jVKqnNGFpSB3lPbaIwCgYIKoZIzj0EAwIwXjEL\nMAkGA1UEBhMCVVMxCzAJBgNVBAgMAk5DMRMwEQYDVQQKDApOZXRGb3VuZHJ5MS0w\nKwYDVQQDDCROZXRGb3VuZHJ5IFppdGkgRXh0ZXJuYWwgQVBJIFJvb3QgQ0EwHhcN\nMTgxMTE1MTI1NzE3WhcNMTkxMTI1MTI1NzE3WjBrMQswCQYDVQQGEwJVUzELMAkG\nA1UECAwCTkMxEjAQBgNVBAcMCUNoYXJsb3R0ZTETMBEGA1UECgwKTmV0Rm91bmRy\neTEPMA0GA1UECwwGQWR2RGV2MRUwEwYDVQQDDAxaaXRpQ2xpZW50MDEwdjAQBgcq\nhkjOPQIBBgUrgQQAIgNiAATTl2ft+/K9RvDgki9gSr9udNcV2bxD4LrWEdCdXNzF\niVUiEcEte9z/M0JRt8lgo17OjFvS+ecrAmLtIZNmQnH3+9YeafjeNPpvQsMKxlTN\nMnU7Hka11GHc6swQZSyHvlKjgcUwgcIwCQYDVR0TBAIwADARBglghkgBhvhCAQEE\nBAMCBaAwMwYJYIZIAYb4QgENBCYWJE9wZW5TU0wgR2VuZXJhdGVkIENsaWVudCBD\nZXJ0aWZpY2F0ZTAdBgNVHQ4EFgQUtx+Tej6lSYdjb8Jbc2QuvoEsI/swHwYDVR0j\nBBgwFoAUcdTlRrnP43ZbQ3PGAbZMPE26+H4wDgYDVR0PAQH/BAQDAgXgMB0GA1Ud\nJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDBDAKBggqhkjOPQQDAgNpADBmAjEAuXDS\nH7KKMr+la+Yuh8d8Q9cLtXzdS0j6a8e7iOyPJmdWq2WuzNdbCfAfLgKXuxhSAjEA\nsadZrXl1OBv11RGAKdYBIyRmfYUotCFAtCNKcfgBUxci0TDaKDA7r3jnjKT1d7Fs\n-----END CERTIFICATE-----\n"
+            }
+          },
+          "404": {
+            "description": "The requested resource does not exist",
+            "schema": {
+              "$ref": "#/definitions/apiErrorEnvelope"
+            },
+            "examples": {
+              "application/json": {
+                "error": {
+                  "args": {
+                    "urlVars": {
+                      "id": "71a3000f-7dda-491a-9b90-a19f4ee6c406"
+                    }
+                  },
+                  "cause": null,
+                  "causeMessage": "",
+                  "code": "NOT_FOUND",
+                  "message": "The resource requested was not found or is no longer available",
+                  "requestId": "270908d6-f2ef-4577-b973-67bec18ae376"
+                },
+                "meta": {
+                  "apiEnrolmentVersion": "0.0.1",
+                  "apiVersion": "0.0.1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/enroll/ott": {
       "post": {
         "description": "Enroll an identity via a one-time-token which is supplied via a query string parameter. This enrollment method\nexpects a PEM encoded CSRs to be provided for fulfillment. It is up to the enrolling identity to manage the\nprivate key backing the CSR request.\n",
@@ -16250,7 +16622,7 @@ func init() {
     },
     "/enroll/ottca": {
       "post": {
-        "description": "Enroll an identity via a one-time-token that also requires a pre-exchanged client certificate to match a\nCertificate Authority that has been added and verified (See POST /cas and POST /cas{id}/verify). The client\nmust present a client certificate signed by CA associated with the enrollment. This enrollment is similar to\nCA auto enrollment except that is required the identity to be pre-created.\n\nAs the client certificat has been pre-exchanged there is no CSR input to this enrollment method.\n",
+        "description": "Enroll an identity via a one-time-token that also requires a pre-exchanged client certificate to match a\nCertificate Authority that has been added and verified (See POST /cas and POST /cas{id}/verify). The client\nmust present a client certificate signed by CA associated with the enrollment. This enrollment is similar to\nCA auto enrollment except that is required the identity to be pre-created.\n\nAs the client certificate has been pre-exchanged there is no CSR input to this enrollment method.\n",
         "tags": [
           "Enroll"
         ],
@@ -16281,7 +16653,7 @@ func init() {
         "tags": [
           "Enroll"
         ],
-        "summary": "Enroll an identity vvia one-time-token",
+        "summary": "Enroll an identity via one-time-token",
         "operationId": "ernollUpdb",
         "responses": {
           "200": {

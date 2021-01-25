@@ -15,6 +15,7 @@ require (
 	github.com/Jeffail/gabs v1.4.0
 	github.com/achanda/go-sysctl v0.0.0-20160222034550-6be7678c45d2
 	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
+	github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/coreos/go-iptables v0.5.0
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
@@ -30,6 +31,8 @@ require (
 	github.com/google/go-cmp v0.5.4
 	github.com/google/uuid v1.1.5
 	github.com/gorilla/handlers v1.5.1
+	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/websocket v1.4.2
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/kataras/go-events v0.0.3-0.20201007151548-c411dc70c0a6
 	github.com/mailru/easyjson v0.7.6 // indirect
@@ -39,7 +42,7 @@ require (
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/netfoundry/secretstream v0.1.2
 	github.com/openziti/fabric v0.15.11
-	github.com/openziti/foundation v0.15.5
+	github.com/openziti/foundation v0.15.7
 	github.com/openziti/sdk-golang v0.15.9
 	github.com/orcaman/concurrent-map v0.0.0-20190826125027-8c72a8bb44f6
 	github.com/pkg/errors v0.9.1

@@ -449,6 +449,11 @@ func configureAPI(api *operations.ZitiEdgeAPI) http.Handler {
 			return middleware.NotImplemented("operation enroll.EnrollErOtt has not yet been implemented")
 		})
 	}
+	if api.EnrollEnrollOtfHandler == nil {
+		api.EnrollEnrollOtfHandler = enroll.EnrollOtfHandlerFunc(func(params enroll.EnrollOtfParams) middleware.Responder {
+			return middleware.NotImplemented("operation enroll.EnrollOtf has not yet been implemented")
+		})
+	}
 	if api.EnrollEnrollOttHandler == nil {
 		api.EnrollEnrollOttHandler = enroll.EnrollOttHandlerFunc(func(params enroll.EnrollOttParams) middleware.Responder {
 			return middleware.NotImplemented("operation enroll.EnrollOtt has not yet been implemented")

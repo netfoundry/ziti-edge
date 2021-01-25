@@ -57,6 +57,8 @@ type ClientService interface {
 
 	EnrollErOtt(params *EnrollErOttParams) (*EnrollErOttOK, error)
 
+	EnrollOtf(params *EnrollOtfParams) (*EnrollOtfOK, error)
+
 	EnrollOtt(params *EnrollOttParams) (*EnrollOttOK, error)
 
 	EnrollOttCa(params *EnrollOttCaParams) (*EnrollOttCaOK, error)
@@ -181,6 +183,44 @@ func (a *Client) EnrollErOtt(params *EnrollErOttParams) (*EnrollErOttOK, error) 
 }
 
 /*
+  EnrollOtf enrolls an identity on the fly
+
+  Enroll an identity On-The-Fly. This enrollment method expects a PEM encoded CSR to be provided for fulfillment.
+It is up to the enrolling identity to manage the private key backing the CSR request.
+
+*/
+func (a *Client) EnrollOtf(params *EnrollOtfParams) (*EnrollOtfOK, error) {
+	// TODO: Validate the params before sending
+	if params == nil {
+		params = NewEnrollOtfParams()
+	}
+
+	result, err := a.transport.Submit(&runtime.ClientOperation{
+		ID:                 "enrollOtf",
+		Method:             "POST",
+		PathPattern:        "/enroll/otf",
+		ProducesMediaTypes: []string{"application/json", "application/x-pem-file"},
+		ConsumesMediaTypes: []string{"application/x-pem-file"},
+		Schemes:            []string{"https"},
+		Params:             params,
+		Reader:             &EnrollOtfReader{formats: a.formats},
+		Context:            params.Context,
+		Client:             params.HTTPClient,
+	})
+	if err != nil {
+		return nil, err
+	}
+	success, ok := result.(*EnrollOtfOK)
+	if ok {
+		return success, nil
+	}
+	// unexpected success response
+	// safeguard: normally, absent a default response, unknown success responses return an error above: so this is a codegen issue
+	msg := fmt.Sprintf("unexpected success response for enrollOtf: API contract not enforced by server. Client expected to get an error, but got: %T", result)
+	panic(msg)
+}
+
+/*
   EnrollOtt enrolls an identity via one time token
 
   Enroll an identity via a one-time-token which is supplied via a query string parameter. This enrollment method
@@ -227,7 +267,7 @@ Certificate Authority that has been added and verified (See POST /cas and POST /
 must present a client certificate signed by CA associated with the enrollment. This enrollment is similar to
 CA auto enrollment except that is required the identity to be pre-created.
 
-As the client certificat has been pre-exchanged there is no CSR input to this enrollment method.
+As the client certificate has been pre-exchanged there is no CSR input to this enrollment method.
 
 */
 func (a *Client) EnrollOttCa(params *EnrollOttCaParams) (*EnrollOttCaOK, error) {
@@ -262,7 +302,7 @@ func (a *Client) EnrollOttCa(params *EnrollOttCaParams) (*EnrollOttCaOK, error) 
 }
 
 /*
-  ErnollUpdb enrolls an identity vvia one time token
+  ErnollUpdb enrolls an identity via one time token
 
   Enrolls an identity via a one-time-token to establish an initial username and password combination
 

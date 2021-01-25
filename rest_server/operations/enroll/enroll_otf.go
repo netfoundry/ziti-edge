@@ -35,48 +35,44 @@ import (
 	"github.com/go-openapi/runtime/middleware"
 )
 
-// EnrollOttCaHandlerFunc turns a function with the right signature into a enroll ott ca handler
-type EnrollOttCaHandlerFunc func(EnrollOttCaParams) middleware.Responder
+// EnrollOtfHandlerFunc turns a function with the right signature into a enroll otf handler
+type EnrollOtfHandlerFunc func(EnrollOtfParams) middleware.Responder
 
 // Handle executing the request and returning a response
-func (fn EnrollOttCaHandlerFunc) Handle(params EnrollOttCaParams) middleware.Responder {
+func (fn EnrollOtfHandlerFunc) Handle(params EnrollOtfParams) middleware.Responder {
 	return fn(params)
 }
 
-// EnrollOttCaHandler interface for that can handle valid enroll ott ca params
-type EnrollOttCaHandler interface {
-	Handle(EnrollOttCaParams) middleware.Responder
+// EnrollOtfHandler interface for that can handle valid enroll otf params
+type EnrollOtfHandler interface {
+	Handle(EnrollOtfParams) middleware.Responder
 }
 
-// NewEnrollOttCa creates a new http.Handler for the enroll ott ca operation
-func NewEnrollOttCa(ctx *middleware.Context, handler EnrollOttCaHandler) *EnrollOttCa {
-	return &EnrollOttCa{Context: ctx, Handler: handler}
+// NewEnrollOtf creates a new http.Handler for the enroll otf operation
+func NewEnrollOtf(ctx *middleware.Context, handler EnrollOtfHandler) *EnrollOtf {
+	return &EnrollOtf{Context: ctx, Handler: handler}
 }
 
-/*EnrollOttCa swagger:route POST /enroll/ottca Enroll enrollOttCa
+/*EnrollOtf swagger:route POST /enroll/otf Enroll enrollOtf
 
-Enroll an identity via one-time-token with a pre-exchanged client certificate
+Enroll an identity On-The-Fly
 
-Enroll an identity via a one-time-token that also requires a pre-exchanged client certificate to match a
-Certificate Authority that has been added and verified (See POST /cas and POST /cas{id}/verify). The client
-must present a client certificate signed by CA associated with the enrollment. This enrollment is similar to
-CA auto enrollment except that is required the identity to be pre-created.
-
-As the client certificate has been pre-exchanged there is no CSR input to this enrollment method.
+Enroll an identity On-The-Fly. This enrollment method expects a PEM encoded CSR to be provided for fulfillment.
+It is up to the enrolling identity to manage the private key backing the CSR request.
 
 
 */
-type EnrollOttCa struct {
+type EnrollOtf struct {
 	Context *middleware.Context
-	Handler EnrollOttCaHandler
+	Handler EnrollOtfHandler
 }
 
-func (o *EnrollOttCa) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (o *EnrollOtf) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	route, rCtx, _ := o.Context.RouteInfo(r)
 	if rCtx != nil {
 		r = rCtx
 	}
-	var Params = NewEnrollOttCaParams()
+	var Params = NewEnrollOtfParams()
 
 	if err := o.Context.BindValidRequest(r, route, &Params); err != nil { // bind params
 		o.Context.Respond(rw, r, route.Produces, route, err)

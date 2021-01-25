@@ -1499,6 +1499,26 @@ paths:
           $ref: '#/responses/emptyResponse'
         '404':
           $ref: '#/responses/notFoundResponse'
+  '/enroll/otf':
+    post:
+      summary: Enroll an identity On-The-Fly
+      description: |
+        Enroll an identity On-The-Fly. This enrollment method expects a PEM encoded CSR to be provided for fulfillment. 
+        It is up to the enrolling identity to manage the private key backing the CSR request.
+      operationId: enrollOtf
+      tags:
+        - Enroll
+      consumes:
+        - application/x-pem-file
+      produces:
+        #default to PEM for older clients that do not properly set/inspect accept/content-type headers
+        - application/x-pem-file
+        - application/json
+      responses:
+        '200':
+          $ref: '#/responses/zitiSignedCert'
+        '404':
+          $ref: '#/responses/notFoundResponse'
   '/enroll/ott':
     parameters:
       - $ref: '#/parameters/token'
@@ -1531,7 +1551,7 @@ paths:
         must present a client certificate signed by CA associated with the enrollment. This enrollment is similar to
         CA auto enrollment except that is required the identity to be pre-created.
 
-        As the client certificat has been pre-exchanged there is no CSR input to this enrollment method.
+        As the client certificate has been pre-exchanged there is no CSR input to this enrollment method.
       operationId: enrollOttCa
       tags:
         - Enroll
@@ -1542,7 +1562,7 @@ paths:
     parameters:
       - $ref: '#/parameters/token'
     post:
-      summary: Enroll an identity vvia one-time-token
+      summary: Enroll an identity via one-time-token
       description: |
         Enrolls an identity via a one-time-token to establish an initial username and password combination
       operationId: ernollUpdb
@@ -3904,6 +3924,7 @@ responses:
     description: Data indicating necessary service updates
     schema:
       $ref: '#/definitions/listCurrentApiSessionServiceUpdatesEnvelope'
+
 
 #######################################################################################################################
 #

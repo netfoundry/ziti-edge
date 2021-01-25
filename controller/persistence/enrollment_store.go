@@ -35,6 +35,7 @@ const (
 	FieldEnrollmentUsername  = "username"
 	FieldEnrollmentJwt       = "jwt"
 
+	MethodEnrollOtf   = "otf"
 	MethodEnrollOtt   = "ott"
 	MethodEnrollOttCa = "ottca"
 	MethodEnrollCa    = "ca"

@@ -90,6 +90,10 @@ const (
 	InvalidEnrollMethodMessage string = "The supplied enrollment method is not valid"
 	InvalidEnrollMethodStatus  int    = http.StatusBadRequest
 
+	InvalidEnrollUsernameCode    string = "INVALID_ENROLL_USERNAME"
+	InvalidEnrollUsernameMessage string = "The supplied enrollment username is not valid"
+	InvalidEnrollUsernameStatus  int    = http.StatusBadRequest
+
 	InvalidFilterCode       string = "INVALID_FILTER"
 	InvalidFilterMessage    string = "The filter query supplied is invalid"
 	httpStatusInvalidFilter        = 480

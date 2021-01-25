@@ -133,6 +133,13 @@ func NewInvalidEnrollMethod() *ApiError {
 		Status:  InvalidEnrollMethodStatus,
 	}
 }
+func NewInvalidEnrollUsername() *ApiError {
+	return &ApiError{
+		Code:    InvalidEnrollUsernameCode,
+		Message: InvalidEnrollUsernameMessage,
+		Status:  InvalidEnrollUsernameStatus,
+	}
+}
 func NewInvalidFilter(cause error) *ApiError {
 	return &ApiError{
 		Code:        InvalidFilterCode,

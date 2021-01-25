@@ -19,17 +19,20 @@
 package tests
 
 import (
+	"crypto/tls"
 	"github.com/openziti/edge/eid"
 	"github.com/openziti/fabric/controller/xt_smartrouting"
+	"github.com/openziti/sdk-golang/ziti"
 	"sync"
 	"testing"
 	"time"
 )
 
-func Test_Dataflow(t *testing.T) {
+func Test_Api_Session_Certs_Data_Flow(t *testing.T) {
 	ctx := NewTestContext(t)
 	defer ctx.Teardown()
 	ctx.StartServer()
+
 	ctx.RequireAdminLogin()
 
 	service := ctx.AdminSession.RequireNewServiceAccessibleToAll(xt_smartrouting.Name)
@@ -57,17 +60,21 @@ func Test_Dataflow(t *testing.T) {
 	})
 	testServer.start()
 
-	_, clientContext := ctx.AdminSession.RequireCreateSdkContext()
+	context := ziti.NewUpdbContextWithOpts("https://"+ctx.ApiHost, nil, &tls.Config{
+		InsecureSkipVerify: true}, nil, ctx.AdminAuthenticator.Username, ctx.AdminAuthenticator.Password)
 
-	t.Run("dial service", func(t *testing.T) {
+	t.Run("wrap connection", func(t *testing.T) {
 		ctx.testContextChanged(t)
-		conn := ctx.WrapConn(clientContext.Dial(service.Name))
+		conn := ctx.WrapConn(context.Dial(service.Name))
 
-		t.Run("send/recieve data", func(t *testing.T) {
+		t.Run("transfer data", func(t *testing.T) {
+			ctx.testContextChanged(t)
+			name := eid.New()
+
 			var wg sync.WaitGroup
+
 			wg.Add(5)
 
-			name := eid.New()
 			go func() {
 				defer wg.Done()
 				conn.WriteString(name, time.Second)
@@ -77,14 +84,17 @@ func Test_Dataflow(t *testing.T) {
 				defer wg.Done()
 				conn.ReadExpected("hello, "+name, time.Second)
 			}()
+
 			go func() {
 				defer wg.Done()
 				conn.WriteString("quit", time.Second)
 			}()
+
 			go func() {
 				defer wg.Done()
 				conn.ReadExpected("ok", time.Second)
 			}()
+
 			go func() {
 				defer wg.Done()
 				testServer.waitForDone(ctx, 5*time.Second)

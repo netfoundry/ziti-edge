@@ -62,6 +62,10 @@ func (ro *EnrollRouter) Register(ae *env.AppEnv) {
 		return ae.IsAllowed(ro.enrollHandler, params.HTTPRequest, "", "", permissions.Always())
 	})
 
+	ae.Api.EnrollEnrollOtfHandler = enroll.EnrollOtfHandlerFunc(func(params enroll.EnrollOtfParams) middleware.Responder {
+		return ae.IsAllowed(ro.enrollHandler, params.HTTPRequest, "", "", permissions.Always())
+	})
+
 	ae.Api.EnrollEnrollOttHandler = enroll.EnrollOttHandlerFunc(func(params enroll.EnrollOttParams) middleware.Responder {
 		return ae.IsAllowed(ro.enrollHandler, params.HTTPRequest, "", "", permissions.Always())
 	})
@@ -156,9 +160,9 @@ func (ro *EnrollRouter) enrollHandler(ae *env.AppEnv, rc *response.RequestContex
 		}
 	}
 
-	// for non ott enrollment, always return JSON
+	// for non ott|otf enrollment, always return JSON
 	//prefer JSON if explicitly acceptable
-	if enrollContext.Method != persistence.MethodEnrollOtt || explicitJsonAccept {
+	if (enrollContext.Method != persistence.MethodEnrollOtt || enrollContext.Method != persistence.MethodEnrollOtf) || explicitJsonAccept {
 		rc.SetProducer(runtime.JSONProducer())
 	}
 

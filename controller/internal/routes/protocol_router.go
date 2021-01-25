@@ -51,6 +51,9 @@ func (router *ProtocolRouter) List(ae *env.AppEnv, rc *response.RequestContext) 
 		"https": rest_model.Protocol{
 			Address: &ae.Config.Api.Advertise,
 		},
+		"ws": rest_model.Protocol{
+			Address: &ae.Config.WSApi.Advertise,
+		},
 	}
 	rc.RespondWithOk(data, &rest_model.Meta{})
 }

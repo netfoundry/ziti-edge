@@ -70,6 +70,10 @@ func (qo *QueryOptions) ValidateAndCorrect() {
 	}
 }
 
+func (qo *QueryOptions) GetFullQuery(store boltz.ListStore) (ast.Query, error) {
+	return qo.getFullQuery(store)
+}
+
 func (qo *QueryOptions) getFullQuery(store boltz.ListStore) (ast.Query, error) {
 	if qo.Predicate == "" {
 		qo.Predicate = "true"
