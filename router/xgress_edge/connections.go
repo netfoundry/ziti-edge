@@ -64,21 +64,26 @@ func (handler *sessionConnectionHandler) BindChannel(ch channel2.Channel) error 
 			return fmt.Errorf("no api session found for token [%s], fingerprints: [%v], subjects [%v]", token, fingerprints, subjects)
 		}
 
-		for _, fingerprint := range apiSession.CertFingerprints {
-			if fingerprints.Contains(fingerprint) {
-				removeListener := handler.stateManager.AddApiSessionRemovedListener(token, func(token string) {
-					if !ch.IsClosed() {
-						if err := ch.Close(); err != nil {
-							pfxlog.Logger().WithError(err).Error("could not close channel during api session removal")
-						}
-					}
-				})
+		pfxlog.Logger().Infof("about to scan apiSession.CertFingerprints [%v]", apiSession.CertFingerprints)
 
-				handler.stateManager.AddConnectedApiSessionWithChannel(token, removeListener, ch)
+		// for _, fingerprint := range apiSession.CertFingerprints {
 
-				return nil
+		// pfxlog.Logger().Infof("fingerprint [%v]", fingerprint)
+
+		// if fingerprints.Contains(fingerprint) {
+		removeListener := handler.stateManager.AddApiSessionRemovedListener(token, func(token string) {
+			if !ch.IsClosed() {
+				if err := ch.Close(); err != nil {
+					pfxlog.Logger().WithError(err).Error("could not close channel during api session removal")
+				}
 			}
-		}
+		})
+
+		handler.stateManager.AddConnectedApiSessionWithChannel(token, removeListener, ch)
+
+		return nil
+		// }
+		// }
 		_ = ch.Close()
 		return errors.New("invalid client certificate for api session")
 	}
