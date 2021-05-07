@@ -179,9 +179,9 @@ func newMatchingProcessCheckAndData() (*PostureCheckProcess, *PostureData) {
 	}
 
 	processCheck := &PostureCheckProcess{
-		PostureCheckId:  postureCheckId,
-		OperatingSystem: "Windows",
-		Path:            `C:\some\path\some.exe`,
+		PostureCheckId: postureCheckId,
+		OsType:         "Windows",
+		Path:           `C:\some\path\some.exe`,
 		Hashes: []string{
 			"something that will never match 1",
 			binaryHash,

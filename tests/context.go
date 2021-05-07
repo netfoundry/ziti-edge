@@ -1,5 +1,3 @@
-// +build apitests
-
 /*
 	Copyright NetFoundry, Inc.
 
@@ -28,6 +26,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/openziti/edge/edge_common"
 	"github.com/openziti/edge/eid"
 	"github.com/openziti/edge/rest_model"
@@ -40,15 +39,16 @@ import (
 	"github.com/openziti/fabric/router/xgress"
 	"github.com/openziti/foundation/common"
 	"github.com/openziti/foundation/identity/certtools"
-	nfpem "github.com/openziti/foundation/util/pem"
-	sdkconfig "github.com/openziti/sdk-golang/ziti/config"
+	nfPem "github.com/openziti/foundation/util/pem"
+	sdkConfig "github.com/openziti/sdk-golang/ziti/config"
 	"github.com/openziti/sdk-golang/ziti/edge"
-	sdkenroll "github.com/openziti/sdk-golang/ziti/enroll"
+	sdkEnroll "github.com/openziti/sdk-golang/ziti/enroll"
 	"github.com/pkg/errors"
 	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -92,20 +92,23 @@ func init() {
 }
 
 type TestContext struct {
-	ApiHost            string
-	AdminAuthenticator *updbAuthenticator
-	AdminSession       *session
-	fabricController   *controller.Controller
-	EdgeController     *server.Controller
-	Req                *require.Assertions
-	client             *resty.Client
-	enabledJsonLogging bool
+	ApiHost                string
+	AdminAuthenticator     *updbAuthenticator
+	AdminManagementSession *session
+	AdminClientSession     *session
+	fabricController       *controller.Controller
+	EdgeController         *server.Controller
+	Req                    *require.Assertions
+	clientApiClient        *resty.Client
+	managementApiClient    *resty.Client
+	enabledJsonLogging     bool
 
 	edgeRouterEntity    *edgeRouter
 	transitRouterEntity *transitRouter
 	router              *router.Router
 	testing             *testing.T
 	LogLevel            string
+	ControllerConfig    *controller.Config
 }
 
 var defaultTestContext = &TestContext{
@@ -134,6 +137,9 @@ func GetTestContext() *TestContext {
 	return defaultTestContext
 }
 
+// testContextChanged is used to update the *testing.T reference used by library
+// level tests. Necessary because using the wrong *testing.T will cause go test library
+// errors.
 func (ctx *TestContext) testContextChanged(t *testing.T) {
 	ctx.testing = t
 	ctx.Req = require.New(t)
@@ -143,7 +149,21 @@ func (ctx *TestContext) T() *testing.T {
 	return ctx.testing
 }
 
-func (ctx *TestContext) Transport() *http.Transport {
+func (ctx *TestContext) NewTransport() *http.Transport {
+	return ctx.NewTransportWithClientCert(nil, nil)
+}
+
+func (ctx *TestContext) NewTransportWithClientCert(cert *x509.Certificate, privateKey crypto.PrivateKey) *http.Transport {
+	tlsClientConfig := &cryptoTls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	if cert != nil && privateKey != nil {
+		tlsClientConfig.Certificates = []cryptoTls.Certificate{
+			{Certificate: [][]byte{cert.Raw}, PrivateKey: privateKey, Leaf: cert},
+		}
+	}
+
 	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -155,13 +175,11 @@ func (ctx *TestContext) Transport() *http.Transport {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig: &cryptoTls.Config{
-			InsecureSkipVerify: true,
-		},
+		TLSClientConfig:       tlsClientConfig,
 	}
 }
 
-func (ctx *TestContext) HttpClient(transport *http.Transport) *http.Client {
+func (ctx *TestContext) NewHttpClient(transport *http.Transport) *http.Client {
 	jar, err := cookiejar.New(&cookiejar.Options{})
 	ctx.Req.NoError(err)
 
@@ -173,27 +191,54 @@ func (ctx *TestContext) HttpClient(transport *http.Transport) *http.Client {
 	}
 }
 
-func (ctx *TestContext) Client(httpClient *http.Client) *resty.Client {
-	client := resty.NewWithClient(httpClient)
-	return client
+func (ctx *TestContext) NewRestClientWithDefaults() *resty.Client {
+	return resty.NewWithClient(ctx.NewHttpClient(ctx.NewTransport()))
 }
 
-func (ctx *TestContext) NewClient() *resty.Client {
-	return ctx.Client(ctx.HttpClient(ctx.Transport()))
-}
-
-func (ctx *TestContext) DefaultClient() *resty.Client {
-	if ctx.client == nil {
-		ctx.client, _, _ = ctx.NewClientComponents()
-		ctx.client.AllowGetMethodPayload = true
+func (ctx *TestContext) DefaultClientApiClient() *resty.Client {
+	if ctx.clientApiClient == nil {
+		ctx.clientApiClient, _, _ = ctx.NewClientComponents(EdgeClientApiPath)
+		ctx.clientApiClient.AllowGetMethodPayload = true
 	}
-	return ctx.client
+	return ctx.clientApiClient
 }
 
-func (ctx *TestContext) NewClientComponents() (*resty.Client, *http.Client, *http.Transport) {
-	clientTransport := ctx.Transport()
-	httpClient := ctx.HttpClient(clientTransport)
-	client := ctx.Client(httpClient)
+func (ctx *TestContext) DefaultManagementApiClient() *resty.Client {
+	if ctx.managementApiClient == nil {
+		ctx.managementApiClient, _, _ = ctx.NewClientComponents(EdgeManagementApiPath)
+		ctx.managementApiClient.AllowGetMethodPayload = true
+	}
+	return ctx.clientApiClient
+}
+
+func (ctx *TestContext) NewClientComponents(apiPath string) (*resty.Client, *http.Client, *http.Transport) {
+	clientTransport := ctx.NewTransport()
+	httpClient := ctx.NewHttpClient(clientTransport)
+	client := resty.NewWithClient(httpClient)
+
+	apiUrl, err := url.Parse("https://" + ctx.ApiHost)
+
+	if err != nil {
+		panic(err)
+	}
+
+	apiPathUrl, err := url.Parse(apiPath)
+
+	if err != nil {
+		panic(err)
+	}
+
+	baseUrl := apiUrl.ResolveReference(apiPathUrl)
+
+	client.SetHostURL(baseUrl.String())
+
+	return client, httpClient, clientTransport
+}
+
+func (ctx *TestContext) NewClientComponentsWithClientCert(cert *x509.Certificate, privateKey crypto.PrivateKey) (*resty.Client, *http.Client, *http.Transport) {
+	clientTransport := ctx.NewTransportWithClientCert(cert, privateKey)
+	httpClient := ctx.NewHttpClient(clientTransport)
+	client := resty.NewWithClient(httpClient)
 
 	client.SetHostURL("https://" + ctx.ApiHost)
 
@@ -234,6 +279,8 @@ func (ctx *TestContext) StartServerFor(test string, clean bool) {
 	config, err := controller.LoadConfig(ControllerConfFile)
 	ctx.Req.NoError(err)
 
+	ctx.ControllerConfig = config
+
 	log.Info("creating fabric controller")
 	ctx.fabricController, err = controller.NewController(config, NewVersionProviderTest())
 	ctx.Req.NoError(err)
@@ -267,30 +314,30 @@ func (ctx *TestContext) StartServerFor(test string, clean bool) {
 func (ctx *TestContext) createAndEnrollEdgeRouter(tunneler bool, roleAttributes ...string) *edgeRouter {
 	// If an edge router has already been created, delete it and create a new one
 	if ctx.edgeRouterEntity != nil {
-		ctx.AdminSession.requireDeleteEntity(ctx.edgeRouterEntity)
+		ctx.AdminManagementSession.requireDeleteEntity(ctx.edgeRouterEntity)
 		ctx.edgeRouterEntity = nil
 	}
 
 	_ = os.MkdirAll("testdata/edge-router", os.FileMode(0755))
 
 	if tunneler {
-		ctx.edgeRouterEntity = ctx.AdminSession.requireNewTunnelerEnabledEdgeRouter(roleAttributes...)
+		ctx.edgeRouterEntity = ctx.AdminManagementSession.requireNewTunnelerEnabledEdgeRouter(roleAttributes...)
 	} else {
-		ctx.edgeRouterEntity = ctx.AdminSession.requireNewEdgeRouter(roleAttributes...)
+		ctx.edgeRouterEntity = ctx.AdminManagementSession.requireNewEdgeRouter(roleAttributes...)
 	}
-	jwt := ctx.AdminSession.getEdgeRouterJwt(ctx.edgeRouterEntity.id)
+	jwt := ctx.AdminManagementSession.getEdgeRouterJwt(ctx.edgeRouterEntity.id)
 
 	configFile := EdgeRouterConfFile
 	if tunneler {
 		configFile = TunnelerEdgeRouterConfFile
 	}
-	cfgmap, err := router.LoadConfigMap(configFile)
+	configMap, err := router.LoadConfigMap(configFile)
 	ctx.Req.NoError(err)
 
 	enroller := enroll.NewRestEnroller()
-	ctx.Req.NoError(enroller.LoadConfig(cfgmap))
-	var keyAlg sdkconfig.KeyAlgVar
-	keyAlg.Set("RSA")
+	ctx.Req.NoError(enroller.LoadConfig(configMap))
+	var keyAlg sdkConfig.KeyAlgVar
+	_ = keyAlg.Set("RSA")
 	ctx.Req.NoError(enroller.Enroll([]byte(jwt), true, "", keyAlg))
 
 	return ctx.edgeRouterEntity
@@ -299,22 +346,22 @@ func (ctx *TestContext) createAndEnrollEdgeRouter(tunneler bool, roleAttributes 
 func (ctx *TestContext) createAndEnrollTransitRouter() *transitRouter {
 	// If a tx router has already been created, delete it and create a new one
 	if ctx.transitRouterEntity != nil {
-		ctx.AdminSession.requireDeleteEntity(ctx.transitRouterEntity)
+		ctx.AdminManagementSession.requireDeleteEntity(ctx.transitRouterEntity)
 		ctx.transitRouterEntity = nil
 	}
 
 	_ = os.MkdirAll("testdata/transit-router", os.FileMode(0755))
 
-	ctx.transitRouterEntity = ctx.AdminSession.requireNewTransitRouter()
-	jwt := ctx.AdminSession.getTransitRouterJwt(ctx.transitRouterEntity.id)
+	ctx.transitRouterEntity = ctx.AdminManagementSession.requireNewTransitRouter()
+	jwt := ctx.AdminManagementSession.getTransitRouterJwt(ctx.transitRouterEntity.id)
 
-	cfgmap, err := router.LoadConfigMap(TransitRouterConfFile)
+	configMap, err := router.LoadConfigMap(TransitRouterConfFile)
 	ctx.Req.NoError(err)
 
 	enroller := enroll.NewRestEnroller()
-	ctx.Req.NoError(enroller.LoadConfig(cfgmap))
-	var keyAlg sdkconfig.KeyAlgVar
-	keyAlg.Set("RSA")
+	ctx.Req.NoError(enroller.LoadConfig(configMap))
+	var keyAlg sdkConfig.KeyAlgVar
+	_ = keyAlg.Set("RSA")
 	ctx.Req.NoError(enroller.Enroll([]byte(jwt), true, "", keyAlg))
 
 	return ctx.transitRouterEntity
@@ -373,16 +420,16 @@ func (ctx *TestContext) startEdgeRouter() {
 	ctx.Req.NoError(ctx.router.Start())
 }
 
-func (ctx *TestContext) EnrollIdentity(identityId string) *sdkconfig.Config {
-	jwt := ctx.AdminSession.getIdentityJwt(identityId)
-	tkn, _, err := sdkenroll.ParseToken(jwt)
+func (ctx *TestContext) EnrollIdentity(identityId string) *sdkConfig.Config {
+	jwt := ctx.AdminManagementSession.getIdentityJwt(identityId)
+	tkn, _, err := sdkEnroll.ParseToken(jwt)
 	ctx.Req.NoError(err)
 
-	flags := sdkenroll.EnrollmentFlags{
+	flags := sdkEnroll.EnrollmentFlags{
 		Token:  tkn,
 		KeyAlg: "RSA",
 	}
-	conf, err := sdkenroll.Enroll(flags)
+	conf, err := sdkEnroll.Enroll(flags)
 	ctx.Req.NoError(err)
 	return conf
 }
@@ -410,39 +457,16 @@ func (ctx *TestContext) waitForPort(address string, duration time.Duration) erro
 	}
 }
 
-func (ctx *TestContext) unauthenticatedSession() *session {
-	return &session{
-		testContext:   ctx,
-		token:         "",
-		authenticator: nil,
-		identityId:    "",
-	}
-}
-
-func (ctx *TestContext) loginWithCert(cert *x509.Certificate, key *crypto.PrivateKey) (*session, error) {
-	return (&certAuthenticator{
-		cert: cert,
-		key:  key,
-	}).Authenticate(ctx)
-}
-
-func (ctx *TestContext) RequireAdminLogin() {
+func (ctx *TestContext) RequireAdminManagementApiLogin() {
 	var err error
-	ctx.AdminSession, err = ctx.AdminAuthenticator.Authenticate(ctx)
+	ctx.AdminManagementSession, err = ctx.AdminAuthenticator.AuthenticateManagementApi(ctx)
 	ctx.Req.NoError(err)
 }
 
-func (ctx *TestContext) requireLogin(username, password string) *session {
-	session, err := ctx.login(username, password)
+func (ctx *TestContext) RequireAdminClientApiLogin() {
+	var err error
+	ctx.AdminClientSession, err = ctx.AdminAuthenticator.AuthenticateClientApi(ctx)
 	ctx.Req.NoError(err)
-	return session
-}
-
-func (ctx *TestContext) login(username, password string) (*session, error) {
-	return (&updbAuthenticator{
-		Username: username,
-		Password: password,
-	}).Authenticate(ctx)
 }
 
 func (ctx *TestContext) Teardown() {
@@ -458,13 +482,25 @@ func (ctx *TestContext) Teardown() {
 	}
 }
 
-func (ctx *TestContext) newRequest() *resty.Request {
-	return ctx.DefaultClient().R().
+func (ctx *TestContext) newAnonymousClientApiRequest() *resty.Request {
+	return ctx.DefaultClientApiClient().R().
+		SetHeader("content-type", "application/json")
+}
+
+func (ctx *TestContext) newAnonymousManagementApiRequest() *resty.Request {
+	return ctx.DefaultClientApiClient().R().
+		SetHeader("content-type", "application/json")
+}
+
+func (ctx *TestContext) newRequestWithClientCert(cert *x509.Certificate, privateKey crypto.PrivateKey) *resty.Request {
+	client, _, _ := ctx.NewClientComponentsWithClientCert(cert, privateKey)
+
+	return client.R().
 		SetHeader("content-type", "application/json")
 }
 
 func (ctx *TestContext) completeUpdbEnrollment(identityId string, password string) {
-	result := ctx.AdminSession.requireQuery(fmt.Sprintf("identities/%v", identityId))
+	result := ctx.AdminManagementSession.requireQuery(fmt.Sprintf("identities/%v", identityId))
 	path := result.Search(path("data.enrollment.updb.token")...)
 	ctx.Req.NotNil(path)
 	str, ok := path.Data().(string)
@@ -473,7 +509,7 @@ func (ctx *TestContext) completeUpdbEnrollment(identityId string, password strin
 	enrollBody := gabs.New()
 	ctx.setJsonValue(enrollBody, password, "password")
 
-	resp, err := ctx.newRequest().
+	resp, err := ctx.newAnonymousClientApiRequest().
 		SetBody(enrollBody.String()).
 		Post("enroll?token=" + str)
 	ctx.Req.NoError(err)
@@ -482,14 +518,14 @@ func (ctx *TestContext) completeUpdbEnrollment(identityId string, password strin
 }
 
 func (ctx *TestContext) completeCaAutoEnrollment(certAuth *certAuthenticator) {
-	trans := ctx.Transport()
+	trans := ctx.NewTransport()
 	trans.TLSClientConfig.Certificates = []cryptoTls.Certificate{
 		{
 			Certificate: [][]byte{certAuth.cert.Raw},
 			PrivateKey:  certAuth.key,
 		},
 	}
-	client := ctx.Client(ctx.HttpClient(trans))
+	client := resty.NewWithClient(ctx.NewHttpClient(trans))
 	client.SetHostURL("https://" + ctx.ApiHost)
 
 	resp, err := client.NewRequest().
@@ -502,14 +538,14 @@ func (ctx *TestContext) completeCaAutoEnrollment(certAuth *certAuthenticator) {
 }
 
 func (ctx *TestContext) completeCaAutoEnrollmentWithName(certAuth *certAuthenticator, name string) {
-	trans := ctx.Transport()
+	trans := ctx.NewTransport()
 	trans.TLSClientConfig.Certificates = []cryptoTls.Certificate{
 		{
 			Certificate: [][]byte{certAuth.cert.Raw},
 			PrivateKey:  certAuth.key,
 		},
 	}
-	client := ctx.Client(ctx.HttpClient(trans))
+	client := resty.NewWithClient(ctx.NewHttpClient(trans))
 	client.SetHostURL("https://" + ctx.ApiHost)
 
 	body := gabs.New()
@@ -525,7 +561,7 @@ func (ctx *TestContext) completeCaAutoEnrollmentWithName(certAuth *certAuthentic
 }
 
 func (ctx *TestContext) completeOttEnrollment(identityId string) *certAuthenticator {
-	result := ctx.AdminSession.requireQuery(fmt.Sprintf("identities/%v", identityId))
+	result := ctx.AdminManagementSession.requireQuery(fmt.Sprintf("identities/%v", identityId))
 
 	tokenValue := result.Path("data.enrollment.ott.token")
 
@@ -545,7 +581,7 @@ func (ctx *TestContext) completeOttEnrollment(identityId string) *certAuthentica
 
 	csrPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})
 
-	resp, err := ctx.newRequest().
+	resp, err := ctx.newAnonymousClientApiRequest().
 		SetBody(csrPem).
 		SetHeader("content-type", "application/x-pem-file").
 		SetHeader("accept", "application/json").
@@ -559,7 +595,7 @@ func (ctx *TestContext) completeOttEnrollment(identityId string) *certAuthentica
 	err = json.Unmarshal(resp.Body(), envelope)
 	ctx.Req.NoError(err)
 
-	certs := nfpem.PemToX509(envelope.Data.Cert)
+	certs := nfPem.PemToX509(envelope.Data.Cert)
 
 	ctx.Req.NotEmpty(certs)
 
@@ -583,15 +619,29 @@ func (ctx *TestContext) validateDateFieldsForCreate(start time.Time, jsonEntity 
 	return createdAt
 }
 
-func (ctx *TestContext) newPostureCheckMFA(roleAttributes []string) *postureCheckDomain {
-	return &postureCheckDomain{
-		postureCheck: postureCheck{
-			name:           eid.New(),
-			typeId:         "MFA",
-			roleAttributes: roleAttributes,
-			tags:           nil,
-		},
+func (ctx *TestContext) newPostureCheckMFA(roleAttributes []string) *postureCheck {
+	return &postureCheck{
+		name:           eid.New(),
+		typeId:         "MFA",
+		roleAttributes: roleAttributes,
+		tags:           nil,
 	}
+}
+
+func (ctx *TestContext) newPostureCheckProcessMulti(semantic rest_model.Semantic, processes []*rest_model.ProcessMulti, roleAttributes []string) *rest_model.PostureCheckProcessMultiCreate {
+	check := &rest_model.PostureCheckProcessMultiCreate{
+		Processes: processes,
+		Semantic:  &semantic,
+	}
+
+	check.SetRoleAttributes(roleAttributes)
+
+	name := uuid.New().String()
+	check.SetName(&name)
+
+	check.SetTypeID(rest_model.PostureCheckTypePROCESSMULTI)
+
+	return check
 }
 
 func (ctx *TestContext) newPostureCheckDomain(domains []string, roleAttributes []string) *postureCheckDomain {

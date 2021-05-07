@@ -30,6 +30,9 @@ package rest_model
 // Editing this file might prove futile when you re-run the swagger generate command
 
 import (
+	"context"
+	"strconv"
+
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
@@ -49,9 +52,12 @@ type PostureQuery struct {
 	// process
 	Process *PostureQueryProcess `json:"process,omitempty"`
 
+	// processes
+	Processes []*PostureQueryProcess `json:"processes"`
+
 	// query type
 	// Required: true
-	QueryType PostureCheckType `json:"queryType"`
+	QueryType *PostureCheckType `json:"queryType"`
 
 	// timeout
 	// Required: true
@@ -73,7 +79,9 @@ func (m *PostureQuery) UnmarshalJSON(raw []byte) error {
 
 		Process *PostureQueryProcess `json:"process,omitempty"`
 
-		QueryType PostureCheckType `json:"queryType"`
+		Processes []*PostureQueryProcess `json:"processes"`
+
+		QueryType *PostureCheckType `json:"queryType"`
 
 		Timeout *int64 `json:"timeout"`
 	}
@@ -84,6 +92,8 @@ func (m *PostureQuery) UnmarshalJSON(raw []byte) error {
 	m.IsPassing = dataAO1.IsPassing
 
 	m.Process = dataAO1.Process
+
+	m.Processes = dataAO1.Processes
 
 	m.QueryType = dataAO1.QueryType
 
@@ -106,7 +116,9 @@ func (m PostureQuery) MarshalJSON() ([]byte, error) {
 
 		Process *PostureQueryProcess `json:"process,omitempty"`
 
-		QueryType PostureCheckType `json:"queryType"`
+		Processes []*PostureQueryProcess `json:"processes"`
+
+		QueryType *PostureCheckType `json:"queryType"`
 
 		Timeout *int64 `json:"timeout"`
 	}
@@ -114,6 +126,8 @@ func (m PostureQuery) MarshalJSON() ([]byte, error) {
 	dataAO1.IsPassing = m.IsPassing
 
 	dataAO1.Process = m.Process
+
+	dataAO1.Processes = m.Processes
 
 	dataAO1.QueryType = m.QueryType
 
@@ -141,6 +155,10 @@ func (m *PostureQuery) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateProcess(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateProcesses(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -185,13 +203,48 @@ func (m *PostureQuery) validateProcess(formats strfmt.Registry) error {
 	return nil
 }
 
+func (m *PostureQuery) validateProcesses(formats strfmt.Registry) error {
+
+	if swag.IsZero(m.Processes) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.Processes); i++ {
+		if swag.IsZero(m.Processes[i]) { // not required
+			continue
+		}
+
+		if m.Processes[i] != nil {
+			if err := m.Processes[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("processes" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
 func (m *PostureQuery) validateQueryType(formats strfmt.Registry) error {
 
-	if err := m.QueryType.Validate(formats); err != nil {
-		if ve, ok := err.(*errors.Validation); ok {
-			return ve.ValidateName("queryType")
-		}
+	if err := validate.Required("queryType", "body", m.QueryType); err != nil {
 		return err
+	}
+
+	if err := validate.Required("queryType", "body", m.QueryType); err != nil {
+		return err
+	}
+
+	if m.QueryType != nil {
+		if err := m.QueryType.Validate(formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("queryType")
+			}
+			return err
+		}
 	}
 
 	return nil
@@ -201,6 +254,79 @@ func (m *PostureQuery) validateTimeout(formats strfmt.Registry) error {
 
 	if err := validate.Required("timeout", "body", m.Timeout); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// ContextValidate validate this posture query based on the context it is used
+func (m *PostureQuery) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
+	var res []error
+
+	// validation for a type composition with BaseEntity
+	if err := m.BaseEntity.ContextValidate(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateProcess(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateProcesses(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateQueryType(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if len(res) > 0 {
+		return errors.CompositeValidationError(res...)
+	}
+	return nil
+}
+
+func (m *PostureQuery) contextValidateProcess(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.Process != nil {
+		if err := m.Process.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("process")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *PostureQuery) contextValidateProcesses(ctx context.Context, formats strfmt.Registry) error {
+
+	for i := 0; i < len(m.Processes); i++ {
+
+		if m.Processes[i] != nil {
+			if err := m.Processes[i].ContextValidate(ctx, formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("processes" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *PostureQuery) contextValidateQueryType(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.QueryType != nil {
+		if err := m.QueryType.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("queryType")
+			}
+			return err
+		}
 	}
 
 	return nil

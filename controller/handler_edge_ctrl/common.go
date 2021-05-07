@@ -1,9 +1,12 @@
 package handler_edge_ctrl
 
 import (
+	"fmt"
 	"github.com/michaelquigley/pfxlog"
 	"github.com/openziti/edge/controller/env"
 	"github.com/openziti/edge/controller/model"
+	"github.com/openziti/edge/controller/persistence"
+	"github.com/openziti/edge/edge_common"
 	"github.com/openziti/edge/pb/edge_ctrl_pb"
 	"github.com/openziti/fabric/controller/db"
 	"github.com/openziti/fabric/controller/network"
@@ -15,7 +18,9 @@ import (
 	"github.com/openziti/sdk-golang/ziti/edge"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.etcd.io/bbolt"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -51,8 +56,9 @@ func (self *baseRequestHandler) getChannel() channel2.Channel {
 	return self.ch
 }
 
-func (self *baseRequestHandler) returnError(ctx requestContext, err error) {
+func (self *baseRequestHandler) returnError(ctx requestContext, err controllerError) {
 	responseMsg := channel2.NewMessage(int32(edge_ctrl_pb.ContentType_ErrorType), []byte(err.Error()))
+	responseMsg.PutUint32Header(edge.ErrorCodeHeader, err.ErrorCode())
 	responseMsg.ReplyTo(ctx.GetMessage())
 	logger := pfxlog.
 		ContextLogger(self.ch.Label()).
@@ -100,7 +106,7 @@ type sessionRequestContext interface {
 type baseSessionRequestContext struct {
 	handler      requestHandler
 	msg          *channel2.Message
-	err          error
+	err          controllerError
 	sourceRouter *network.Router
 	session      *model.Session
 	service      *model.Service
@@ -116,8 +122,10 @@ func (self *baseSessionRequestContext) GetHandler() requestHandler {
 
 func (self *baseSessionRequestContext) loadRouter() bool {
 	routerId := self.handler.getChannel().Id().Token
-	self.sourceRouter, self.err = self.handler.getNetwork().GetRouter(routerId)
-	if self.err != nil {
+	var err error
+	self.sourceRouter, err = self.handler.getNetwork().GetRouter(routerId)
+	if err != nil {
+		self.err = internalError(err)
 		logrus.
 			WithField("router", routerId).
 			WithField("operation", self.handler.Label()).
@@ -130,8 +138,14 @@ func (self *baseSessionRequestContext) loadRouter() bool {
 
 func (self *baseSessionRequestContext) loadSession(token string) {
 	if self.err == nil {
-		self.session, self.err = self.handler.getAppEnv().Handlers.Session.ReadByToken(token)
-		if self.err != nil {
+		var err error
+		self.session, err = self.handler.getAppEnv().Handlers.Session.ReadByToken(token)
+		if err != nil {
+			if boltz.IsErrNotFoundErr(err) {
+				self.err = InvalidApiSessionError{}
+			} else {
+				self.err = internalError(err)
+			}
 			logrus.
 				WithField("token", token).
 				WithField("operation", self.handler.Label()).
@@ -143,11 +157,11 @@ func (self *baseSessionRequestContext) loadSession(token string) {
 func (self *baseSessionRequestContext) checkSessionType(sessionType string) {
 	if self.err == nil {
 		if self.session.Type != sessionType {
+			self.err = WrongSessionTypeError{}
 			logrus.
 				WithField("sessionId", self.session.Id).
 				WithField("operation", self.handler.Label()).
 				WithError(self.err).Errorf("wrong session type")
-			self.err = errors.New("invalid session")
 		}
 	}
 }
@@ -165,7 +179,7 @@ func (self *baseSessionRequestContext) checkSessionFingerprints(fingerprints []s
 
 		found := stringz.ContainsAny(sessionFingerprints, fingerprints...)
 		if !found {
-			self.err = self.GetHandler().getAppEnv().Handlers.ApiSession.VisitFingerprintsForApiSessionId(self.session.ApiSessionId, func(fingerprint string) bool {
+			err := self.GetHandler().getAppEnv().Handlers.ApiSession.VisitFingerprintsForApiSessionId(self.session.ApiSessionId, func(fingerprint string) bool {
 				sessionFingerprints = append(sessionFingerprints, fingerprint)
 				if stringz.Contains(fingerprints, fingerprint) {
 					found = true
@@ -173,16 +187,19 @@ func (self *baseSessionRequestContext) checkSessionFingerprints(fingerprints []s
 				}
 				return false
 			})
+			self.err = internalError(err)
 		}
 
-		if self.err != nil && !found {
+		if self.err != nil || !found {
+			if self.err == nil {
+				self.err = InvalidApiSessionError{}
+			}
 			logrus.
 				WithField("sessionId", self.session.Id).
 				WithField("operation", self.handler.Label()).
 				WithField("sessionFingerprints", sessionFingerprints).
 				WithField("clientFingerprints", fingerprints).
 				Error("matching fingerprint not found for connect")
-			self.err = errors.New("invalid session")
 		}
 	}
 }
@@ -192,7 +209,7 @@ func (self *baseSessionRequestContext) verifyEdgeRouterAccess() {
 		// validate edge router
 		result, err := self.handler.getAppEnv().Handlers.EdgeRouter.ListForSession(self.session.Id)
 		if err != nil {
-			self.err = errors.Wrap(err, "unable to verify edge router access")
+			self.err = internalError(err)
 			logrus.
 				WithField("sessionId", self.session.Id).
 				WithField("operation", self.handler.Label()).
@@ -209,16 +226,22 @@ func (self *baseSessionRequestContext) verifyEdgeRouterAccess() {
 		}
 
 		if !edgeRouterAllowed {
-			self.err = errors.New("invalid edge router for session")
+			self.err = InvalidEdgeRouterForSessionError{}
 		}
 	}
 }
 
 func (self *baseSessionRequestContext) loadService() {
 	if self.err == nil {
-		self.service, self.err = self.handler.getAppEnv().Handlers.EdgeService.Read(self.session.ServiceId)
+		var err error
+		self.service, err = self.handler.getAppEnv().Handlers.EdgeService.Read(self.session.ServiceId)
 
-		if self.err != nil {
+		if err != nil {
+			if boltz.IsErrNotFoundErr(err) {
+				err = InvalidServiceError{}
+			} else {
+				err = internalError(err)
+			}
 			logrus.
 				WithField("sessionId", self.session.Id).
 				WithField("operation", self.handler.Label()).
@@ -231,9 +254,16 @@ func (self *baseSessionRequestContext) loadService() {
 
 func (self *baseSessionRequestContext) loadServiceForName(name string) {
 	if self.err == nil {
-		self.service, self.err = self.handler.getAppEnv().Handlers.EdgeService.ReadByName(name)
+		var err error
+		self.service, err = self.handler.getAppEnv().Handlers.EdgeService.ReadByName(name)
 
-		if self.err != nil {
+		if err != nil {
+			if boltz.IsErrNotFoundErr(err) {
+				err = InvalidServiceError{}
+			} else {
+				err = internalError(err)
+			}
+
 			logrus.
 				WithField("sessionId", self.session.Id).
 				WithField("operation", self.handler.Label()).
@@ -244,12 +274,83 @@ func (self *baseSessionRequestContext) loadServiceForName(name string) {
 	}
 }
 
+func (self *baseSessionRequestContext) validateTerminatorIdentity(tx *bbolt.Tx, terminator terminator) error {
+	session, err := self.getTerminatorSession(tx, terminator, "")
+	if err != nil {
+		return err
+	}
+
+	if terminator.GetIdentity() == "" {
+		return nil
+	}
+
+	identityTerminators, err := self.GetHandler().getAppEnv().BoltStores.Terminator.GetTerminatorsInIdentityGroup(tx, terminator.GetId())
+	for _, otherTerminator := range identityTerminators {
+		otherSession, err := self.getTerminatorSession(tx, otherTerminator, "sibling ")
+		if err != nil {
+			return err
+		}
+		if otherSession != nil {
+			if otherSession.ApiSession.IdentityId != session.ApiSession.IdentityId {
+				return errors.Errorf("sibling terminator %v with shared identity %v belongs to different identity", terminator.GetId(), terminator.GetIdentity())
+			}
+		}
+	}
+
+	return nil
+}
+
+type terminator interface {
+	GetId() string
+	GetIdentity() string
+	GetBinding() string
+	GetAddress() string
+}
+
+func (self *baseSessionRequestContext) getTerminatorSession(tx *bbolt.Tx, terminator terminator, context string) (*persistence.Session, error) {
+	if terminator.GetBinding() != edge_common.EdgeBinding {
+		return nil, errors.Errorf("%vterminator %v with identity %v is not edge terminator. Can't share identity", context, terminator.GetId(), terminator.GetIdentity())
+	}
+
+	addressParts := strings.Split(terminator.GetAddress(), ":")
+	if len(addressParts) != 2 {
+		return nil, errors.Errorf("%vterminator %v with identity %v is not edge terminator. Can't share identity", context, terminator.GetId(), terminator.GetIdentity())
+	}
+
+	if addressParts[0] != "hosted" {
+		return nil, errors.Errorf("%vterminator %v with identity %v is not edge terminator. Can't share identity", context, terminator.GetId(), terminator.GetIdentity())
+	}
+
+	sessionToken := addressParts[1]
+	session, err := self.GetHandler().getAppEnv().BoltStores.Session.LoadOneByToken(tx, sessionToken)
+	if err != nil {
+		pfxlog.Logger().Warnf("sibling terminator %v with shared identity %v has invalid session token %v", terminator.GetId(), terminator.GetIdentity(), sessionToken)
+		return nil, nil
+	}
+
+	if session.ApiSession == nil {
+		apiSession, err := self.GetHandler().getAppEnv().BoltStores.ApiSession.LoadOneById(tx, session.ApiSessionId)
+		if err != nil {
+			return nil, err
+		}
+		session.ApiSession = apiSession
+	}
+
+	return session, nil
+}
+
 func (self *baseSessionRequestContext) verifyTerminator(terminatorId string, binding string) *network.Terminator {
 	if self.err == nil {
 		var terminator *network.Terminator
-		terminator, self.err = self.handler.getNetwork().Terminators.Read(terminatorId)
+		var err error
+		terminator, err = self.handler.getNetwork().Terminators.Read(terminatorId)
 
-		if self.err != nil {
+		if err != nil {
+			if boltz.IsErrNotFoundErr(err) {
+				self.err = invalidTerminator("invalid terminator: not found")
+			} else {
+				self.err = internalError(err)
+			}
 			log := logrus.
 				WithField("operation", self.handler.Label()).
 				WithField("terminatorId", terminatorId).
@@ -258,11 +359,12 @@ func (self *baseSessionRequestContext) verifyTerminator(terminatorId string, bin
 				log = log.WithField("sessionId", self.session.Id)
 			}
 			log.Error("terminator not found")
+			return nil
 		}
 
 		if terminator != nil && terminator.Router != self.sourceRouter.Id {
-			self.err = errors.Errorf("%v request for terminator %v on router %v came from router %v",
-				self.handler.Label(), terminatorId, terminator.Router, self.sourceRouter.Id)
+			self.err = invalidTerminator(fmt.Sprintf("%v request for terminator %v on router %v came from router %v",
+				self.handler.Label(), terminatorId, terminator.Router, self.sourceRouter.Id))
 
 			log := logrus.
 				WithField("operation", self.handler.Label()).
@@ -274,11 +376,12 @@ func (self *baseSessionRequestContext) verifyTerminator(terminatorId string, bin
 				log = log.WithField("sessionId", self.session.Id)
 			}
 			log.Error("not allowed to operate on terminators on other routers")
+			return nil
 		}
 
 		if terminator != nil && terminator.Binding != binding {
-			self.err = errors.Errorf("can't operate on terminator %v with wrong binding, expected binding %v, was %v ",
-				terminatorId, binding, terminator.Binding)
+			self.err = invalidTerminator(fmt.Sprintf("can't operate on terminator %v with wrong binding, expected binding %v, was %v ",
+				terminatorId, binding, terminator.Binding))
 
 			log := logrus.
 				WithField("operation", self.handler.Label()).
@@ -292,6 +395,7 @@ func (self *baseSessionRequestContext) verifyTerminator(terminatorId string, bin
 				log = log.WithField("sessionId", self.session.Id)
 			}
 			log.Error("incorrect binding")
+			return nil
 		}
 
 		return terminator
@@ -305,7 +409,7 @@ func (self *baseSessionRequestContext) updateTerminator(terminator *network.Term
 
 		if request.GetUpdateCost() {
 			if request.GetCost() > math.MaxUint16 {
-				self.err = errors.Errorf("invalid cost %v. cost must be between 0 and %v inclusive", request.GetCost(), math.MaxUint16)
+				self.err = invalidCost(fmt.Sprintf("invalid cost %v. cost must be between 0 and %v inclusive", request.GetCost(), math.MaxUint16))
 				return
 			}
 			terminator.Cost = uint16(request.GetCost())
@@ -320,14 +424,14 @@ func (self *baseSessionRequestContext) updateTerminator(terminator *network.Term
 			} else if request.GetPrecedence() == edge_ctrl_pb.TerminatorPrecedence_Failed {
 				terminator.Precedence = xt.Precedences.Failed
 			} else {
-				self.err = errors.Errorf("invalid precedence: %v", request.GetPrecedence())
+				self.err = invalidPrecedence(fmt.Sprintf("invalid precedence: %v", request.GetPrecedence()))
 				return
 			}
 
 			checker[db.FieldTerminatorPrecedence] = struct{}{}
 		}
 
-		self.err = self.handler.getNetwork().Terminators.Patch(terminator, checker)
+		self.err = internalError(self.handler.getNetwork().Terminators.Patch(terminator, checker))
 	}
 }
 
@@ -337,7 +441,7 @@ func (self *baseSessionRequestContext) createCircuit(terminatorIdentity string, 
 
 	if self.err == nil {
 		if self.service.EncryptionRequired && peerData[edge.PublicKeyHeader] == nil {
-			self.err = errors.New("encryption required on service, initiator did not send public header")
+			self.err = encryptionDataMissing("encryption required on service, initiator did not send public header")
 			return nil, nil
 		}
 
@@ -349,7 +453,11 @@ func (self *baseSessionRequestContext) createCircuit(terminatorIdentity string, 
 		clientId := &identity.TokenId{Token: self.session.Id, Data: peerData}
 
 		n := self.handler.getAppEnv().GetHostController().GetNetwork()
-		circuit, self.err = n.CreateSession(self.sourceRouter, clientId, serviceId)
+		var err error
+		circuit, err = n.CreateSession(self.sourceRouter, clientId, serviceId)
+		if err != nil {
+			self.err = internalError(err)
+		}
 
 		if circuit != nil {
 			//static terminator peer data
@@ -363,7 +471,7 @@ func (self *baseSessionRequestContext) createCircuit(terminatorIdentity string, 
 			}
 
 			if self.service.EncryptionRequired && returnPeerData[edge.PublicKeyHeader] == nil {
-				self.err = errors.New("encryption required on service, terminator did not send public header")
+				self.err = encryptionDataMissing("encryption required on service, terminator did not send public header")
 				if err := n.RemoveSession(circuit.Id, true); err != nil {
 					logrus.
 						WithField("operation", self.handler.Label()).

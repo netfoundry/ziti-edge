@@ -39,6 +39,7 @@ func (m *Migrations) initialize(step *boltz.MigrationStep) int {
 	m.addPostureCheckTypes(step)
 	m.createInterceptV1ConfigType(step)
 	m.createHostV1ConfigType(step)
+	m.addProcessMultiPostureCheck(step)
 	step.SetError(m.stores.ConfigType.Create(step.Ctx, hostV2ConfigType))
 
 	return CurrentDbVersion
@@ -316,6 +317,7 @@ var tunnelDefinitions = map[string]interface{}{
 			"low":  map[string]interface{}{"$ref": "#/definitions/portNumber"},
 			"high": map[string]interface{}{"$ref": "#/definitions/portNumber"},
 		},
+		"required": []interface{}{"low", "high"},
 	},
 	"protocolName": map[string]interface{}{
 		"type": "string",

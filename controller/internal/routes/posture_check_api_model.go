@@ -67,7 +67,7 @@ func MapCreatePostureCheckToModel(postureCheck rest_model.PostureCheckCreate) *m
 
 		for _, os := range apiSubType.OperatingSystems {
 			subType.OperatingSystems = append(subType.OperatingSystems, model.OperatingSystem{
-				OsType:     string(os.Type),
+				OsType:     string(*os.Type),
 				OsVersions: os.Versions,
 			})
 		}
@@ -83,13 +83,32 @@ func MapCreatePostureCheckToModel(postureCheck rest_model.PostureCheckCreate) *m
 		}
 	case *rest_model.PostureCheckProcessCreate:
 		ret.SubType = &model.PostureCheckProcess{
-			OperatingSystem: string(apiSubType.Process.OsType),
-			Path:            *apiSubType.Process.Path,
-			Hashes:          apiSubType.Process.Hashes,
-			Fingerprint:     apiSubType.Process.SignerFingerprint,
+			OsType:      string(*apiSubType.Process.OsType),
+			Path:        *apiSubType.Process.Path,
+			Hashes:      apiSubType.Process.Hashes,
+			Fingerprint: apiSubType.Process.SignerFingerprint,
 		}
 	case *rest_model.PostureCheckMfaCreate:
 		ret.SubType = &model.PostureCheckMfa{}
+	case *rest_model.PostureCheckProcessMultiCreate:
+		apiCheck := postureCheck.(*rest_model.PostureCheckProcessMultiCreate)
+		modelCheck := &model.PostureCheckProcessMulti{
+			Semantic: string(*apiCheck.Semantic),
+		}
+
+		for _, process := range apiCheck.Processes {
+			newProc := &model.ProcessMulti{
+				Hashes:             process.Hashes,
+				OsType:             string(*process.OsType),
+				Path:               *process.Path,
+				SignerFingerprints: process.SignerFingerprints,
+			}
+
+			modelCheck.Processes = append(modelCheck.Processes, newProc)
+		}
+
+		ret.SubType = modelCheck
+		ret.TypeId = model.PostureCheckTypeProcessMulti
 	}
 
 	return ret
@@ -119,10 +138,10 @@ func MapUpdatePostureCheckToModel(id string, postureCheck rest_model.PostureChec
 	case *rest_model.PostureCheckProcessUpdate:
 		check := postureCheck.(*rest_model.PostureCheckProcessUpdate)
 		ret.SubType = &model.PostureCheckProcess{
-			OperatingSystem: string(check.Process.OsType),
-			Path:            stringz.OrEmpty(check.Process.Path),
-			Hashes:          check.Process.Hashes,
-			Fingerprint:     check.Process.SignerFingerprint,
+			OsType:      string(*check.Process.OsType),
+			Path:        stringz.OrEmpty(check.Process.Path),
+			Hashes:      check.Process.Hashes,
+			Fingerprint: check.Process.SignerFingerprint,
 		}
 	case *rest_model.PostureCheckOperatingSystemUpdate:
 		check := postureCheck.(*rest_model.PostureCheckOperatingSystemUpdate)
@@ -131,13 +150,32 @@ func MapUpdatePostureCheckToModel(id string, postureCheck rest_model.PostureChec
 
 		for _, restOs := range check.OperatingSystems {
 			modelOs := model.OperatingSystem{
-				OsType:     string(restOs.Type),
+				OsType:     string(*restOs.Type),
 				OsVersions: restOs.Versions,
 			}
 			osCheck.OperatingSystems = append(osCheck.OperatingSystems, modelOs)
 		}
 	case *rest_model.PostureCheckMfaUpdate:
 		ret.SubType = &model.PostureCheckMfa{}
+	case *rest_model.PostureCheckProcessMultiUpdate:
+		apiCheck := postureCheck.(*rest_model.PostureCheckProcessMultiUpdate)
+		modelCheck := &model.PostureCheckProcessMulti{
+			Semantic: string(*apiCheck.Semantic),
+		}
+
+		for _, process := range apiCheck.Processes {
+			newProc := &model.ProcessMulti{
+				Hashes:             process.Hashes,
+				OsType:             string(*process.OsType),
+				Path:               *process.Path,
+				SignerFingerprints: process.SignerFingerprints,
+			}
+
+			modelCheck.Processes = append(modelCheck.Processes, newProc)
+		}
+
+		ret.SubType = modelCheck
+		ret.TypeId = model.PostureCheckTypeProcessMulti
 	}
 
 	return ret
@@ -175,7 +213,7 @@ func MapPatchPostureCheckToModel(id string, postureCheck rest_model.PostureCheck
 		ret.SubType = subType
 
 		if check.Process != nil {
-			subType.OperatingSystem = string(check.Process.OsType)
+			subType.OsType = string(*check.Process.OsType)
 			subType.Path = stringz.OrEmpty(check.Process.Path)
 			subType.Hashes = check.Process.Hashes
 			subType.Fingerprint = check.Process.SignerFingerprint
@@ -189,7 +227,7 @@ func MapPatchPostureCheckToModel(id string, postureCheck rest_model.PostureCheck
 
 		for _, restOs := range check.OperatingSystems {
 			modelOs := model.OperatingSystem{
-				OsType:     string(restOs.Type),
+				OsType:     string(*restOs.Type),
 				OsVersions: restOs.Versions,
 			}
 			osCheck.OperatingSystems = append(osCheck.OperatingSystems, modelOs)
@@ -199,6 +237,25 @@ func MapPatchPostureCheckToModel(id string, postureCheck rest_model.PostureCheck
 	case *rest_model.PostureCheckMfaPatch:
 		ret.SubType = &model.PostureCheckMfa{}
 		ret.TypeId = model.PostureCheckTypeMFA
+	case *rest_model.PostureCheckProcessMultiPatch:
+		apiCheck := postureCheck.(*rest_model.PostureCheckProcessMultiPatch)
+		modelCheck := &model.PostureCheckProcessMulti{
+			Semantic: string(apiCheck.Semantic),
+		}
+
+		for _, process := range apiCheck.Processes {
+			newProc := &model.ProcessMulti{
+				Hashes:             process.Hashes,
+				OsType:             string(*process.OsType),
+				Path:               *process.Path,
+				SignerFingerprints: process.SignerFingerprints,
+			}
+
+			modelCheck.Processes = append(modelCheck.Processes, newProc)
+		}
+
+		ret.SubType = modelCheck
+		ret.TypeId = model.PostureCheckTypeProcessMulti
 	}
 
 	return ret
@@ -250,8 +307,9 @@ func MapPostureCheckToRestModel(i *model.PostureCheck) (rest_model.PostureCheckD
 		osArray := []*rest_model.OperatingSystem{}
 
 		for _, osMatch := range subType.OperatingSystems {
+			osType := rest_model.OsType(osMatch.OsType)
 			osArray = append(osArray, &rest_model.OperatingSystem{
-				Type:     rest_model.OsType(osMatch.OsType),
+				Type:     &osType,
 				Versions: osMatch.OsVersions,
 			})
 		}
@@ -263,9 +321,11 @@ func MapPostureCheckToRestModel(i *model.PostureCheck) (rest_model.PostureCheckD
 		setBaseEntityDetailsOnPostureCheck(ret, i)
 
 	case *model.PostureCheckProcess:
+		osType := rest_model.OsType(subType.OsType)
+
 		processMatch := &rest_model.Process{
 			Hashes:            subType.Hashes,
-			OsType:            rest_model.OsType(subType.OperatingSystem),
+			OsType:            &osType,
 			Path:              &subType.Path,
 			SignerFingerprint: subType.Fingerprint,
 		}
@@ -288,6 +348,26 @@ func MapPostureCheckToRestModel(i *model.PostureCheck) (rest_model.PostureCheckD
 	case *model.PostureCheckMfa:
 		ret = &rest_model.PostureCheckMfaDetail{}
 		setBaseEntityDetailsOnPostureCheck(ret, i)
+	case *model.PostureCheckProcessMulti:
+		semantic := rest_model.Semantic(subType.Semantic)
+		detail := &rest_model.PostureCheckProcessMultiDetail{
+			Processes: []*rest_model.ProcessMulti{},
+			Semantic:  &semantic,
+		}
+
+		for _, process := range subType.Processes {
+			osType := rest_model.OsType(process.OsType)
+			newProc := &rest_model.ProcessMulti{
+				Hashes:             process.Hashes,
+				OsType:             &osType,
+				Path:               &process.Path,
+				SignerFingerprints: process.SignerFingerprints,
+			}
+
+			detail.Processes = append(detail.Processes, newProc)
+		}
+
+		ret = detail
 	}
 
 	return ret, nil
@@ -329,5 +409,6 @@ func GetNamedPostureCheckRoles(postureCheckHandler *model.PostureCheckHandler, r
 			})
 		}
 	}
+
 	return result
 }

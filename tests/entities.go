@@ -1,5 +1,3 @@
-// +build apitests
-
 /*
 	Copyright NetFoundry, Inc.
 
@@ -56,6 +54,33 @@ type postureCheck struct {
 	roleAttributes []string
 	tags           map[string]interface{}
 }
+
+func (p *postureCheck) getId() string {
+	return p.id
+}
+
+func (p *postureCheck) setId(id string) {
+	p.id = id
+}
+
+func (p *postureCheck) getEntityType() string {
+	return "posture-checks"
+}
+
+func (p *postureCheck) toJson(create bool, ctx *TestContext, fields ...string) string {
+	entityData := gabs.New()
+	ctx.setJsonValue(entityData, p.name, "name")
+	ctx.setJsonValue(entityData, p.roleAttributes, "roleAttributes")
+	ctx.setJsonValue(entityData, p.typeId, "typeId")
+
+	if len(p.tags) > 0 {
+		ctx.setJsonValue(entityData, p.tags, "tags")
+	}
+
+	return entityData.String()
+}
+
+func (p postureCheck) validate(ctx *TestContext, c *gabs.Container) {}
 
 type postureCheckDomain struct {
 	postureCheck
@@ -308,11 +333,9 @@ func (entity *identity) validate(ctx *TestContext, c *gabs.Container) {
 	} else {
 		ctx.pathEquals(c, "default", path("defaultHostingPrecedence"))
 	}
-	if entity.defaultHostingCost == 0 {
-		ctx.pathEquals(c, nil, path("defaultHostingCost"))
-	} else {
-		ctx.pathEquals(c, entity.defaultHostingCost, path("defaultHostingCost"))
-	}
+
+	ctx.pathEquals(c, entity.defaultHostingCost, path("defaultHostingCost"))
+
 	sort.Strings(entity.roleAttributes)
 	ctx.pathEqualsStringSlice(c, entity.roleAttributes, path("roleAttributes"))
 	ctx.pathEquals(c, entity.tags, path("tags"))

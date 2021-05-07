@@ -80,7 +80,7 @@ func (self *servicePoller) handleServiceListUpdate(lastUpdateToken []byte, servi
 
 	// Adds and Updates
 	for _, s := range services {
-		self.services.Upsert(s.Name, s, func(exist bool, valueInMap interface{}, newValue interface{}) interface{} {
+		self.services.Upsert(s.Id, s, func(exist bool, valueInMap interface{}, newValue interface{}) interface{} {
 			if !exist {
 				self.serviceListener.HandleServicesChange(ziti.ServiceAdded, s)
 				return s
@@ -97,7 +97,7 @@ func (self *servicePoller) handleServiceListUpdate(lastUpdateToken []byte, servi
 }
 
 // TODO: just push updates down the control channel when necessary
-func (self *servicePoller) pollServices(pollInterval time.Duration) {
+func (self *servicePoller) pollServices(pollInterval time.Duration, notifyClose <-chan struct{}) {
 	if err := self.fabricProvider.authenticate(); err != nil {
 		logrus.WithError(err).Fatal("xgress_edge_tunnel unable to authenticate to controller. " +
 			"ensure tunneler mode is enabled for this router or disable tunnel listener. exiting ")
@@ -112,6 +112,8 @@ func (self *servicePoller) pollServices(pollInterval time.Duration) {
 		select {
 		case <-ticker.C:
 			self.requestServiceListUpdate()
+		case <-notifyClose:
+			return
 		}
 	}
 }

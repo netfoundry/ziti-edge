@@ -22,7 +22,7 @@ require (
 	github.com/fullsailor/pkcs7 v0.0.0-20190404230743-d7302db945fa
 	github.com/go-openapi/errors v0.20.0
 	github.com/go-openapi/loads v0.20.2
-	github.com/go-openapi/runtime v0.19.27
+	github.com/go-openapi/runtime v0.19.28
 	github.com/go-openapi/spec v0.20.3
 	github.com/go-openapi/strfmt v0.20.1
 	github.com/go-openapi/swag v0.19.15
@@ -40,15 +40,16 @@ require (
 	github.com/miekg/dns v1.1.41
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/netfoundry/secretstream v0.1.2
-	github.com/openziti/fabric v0.16.53
-	github.com/openziti/foundation v0.15.48
-	github.com/openziti/sdk-golang v0.15.39
+	github.com/openziti/fabric v0.16.61
+	github.com/openziti/foundation v0.15.50
+	github.com/openziti/sdk-golang v0.15.47
 	github.com/orcaman/concurrent-map v0.0.0-20210106121528-16402b402231
 	github.com/pkg/errors v0.9.1
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/cobra v1.1.3
+	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
 	github.com/teris-io/shortid v0.0.0-20171029131806-771a37caa5cf
 	github.com/xeipuuv/gojsonschema v1.2.0
@@ -57,7 +58,6 @@ require (
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4
-	google.golang.org/protobuf v1.26.0
 	gopkg.in/resty.v1 v1.12.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b

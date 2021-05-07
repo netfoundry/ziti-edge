@@ -31,6 +31,7 @@ package rest_model
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -46,6 +47,7 @@ import (
 // swagger:discriminator postureCheckFailure postureCheckType
 type PostureCheckFailure interface {
 	runtime.Validatable
+	runtime.ContextValidatable
 
 	// posture check Id
 	// Required: true
@@ -179,6 +181,12 @@ func unmarshalPostureCheckFailure(data []byte, consumer runtime.Consumer) (Postu
 			return nil, err
 		}
 		return &result, nil
+	case "PROCESS_MULTI":
+		var result PostureCheckFailureProcessMulti
+		if err := consumer.Consume(buf2, &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
 	case "postureCheckFailure":
 		var result postureCheckFailure
 		if err := consumer.Consume(buf2, &result); err != nil {
@@ -222,5 +230,10 @@ func (m *postureCheckFailure) validatePostureCheckName(formats strfmt.Registry) 
 		return err
 	}
 
+	return nil
+}
+
+// ContextValidate validates this posture check failure based on context it is used
+func (m *postureCheckFailure) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
 	return nil
 }

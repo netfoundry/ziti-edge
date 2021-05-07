@@ -54,7 +54,7 @@ func newTunneler(factory *Factory, stateManager fabric.StateManager) *tunneler {
 	return result
 }
 
-func (self *tunneler) Start() error {
+func (self *tunneler) Start(notifyClose <-chan struct{}) error {
 	self.servicePoller.serviceListenerLock.Lock()
 	defer self.servicePoller.serviceListenerLock.Unlock()
 
@@ -86,7 +86,7 @@ func (self *tunneler) Start() error {
 	self.servicePoller.serviceListener.HandleProviderReady(self.fabricProvider)
 	self.interceptor.Start(self.fabricProvider)
 
-	go self.servicePoller.pollServices(self.listenOptions.svcPollRate)
+	go self.servicePoller.pollServices(self.listenOptions.svcPollRate, notifyClose)
 
 	return nil
 }

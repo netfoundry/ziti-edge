@@ -31,6 +31,7 @@ package rest_model
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 
 	"github.com/go-openapi/errors"
@@ -41,7 +42,7 @@ import (
 
 // PostureResponseProcessCreate posture response process create
 //
-// swagger:model PostureResponseProcessCreate
+// swagger:model postureResponseProcessCreate
 type PostureResponseProcessCreate struct {
 	idField *string
 
@@ -50,6 +51,9 @@ type PostureResponseProcessCreate struct {
 
 	// is running
 	IsRunning bool `json:"isRunning,omitempty"`
+
+	// path
+	Path string `json:"path,omitempty"`
 
 	// signer fingerprints
 	SignerFingerprints []string `json:"signerFingerprints"`
@@ -83,6 +87,9 @@ func (m *PostureResponseProcessCreate) UnmarshalJSON(raw []byte) error {
 
 		// is running
 		IsRunning bool `json:"isRunning,omitempty"`
+
+		// path
+		Path string `json:"path,omitempty"`
 
 		// signer fingerprints
 		SignerFingerprints []string `json:"signerFingerprints"`
@@ -121,6 +128,7 @@ func (m *PostureResponseProcessCreate) UnmarshalJSON(raw []byte) error {
 
 	result.Hash = data.Hash
 	result.IsRunning = data.IsRunning
+	result.Path = data.Path
 	result.SignerFingerprints = data.SignerFingerprints
 
 	*m = result
@@ -140,6 +148,9 @@ func (m PostureResponseProcessCreate) MarshalJSON() ([]byte, error) {
 		// is running
 		IsRunning bool `json:"isRunning,omitempty"`
 
+		// path
+		Path string `json:"path,omitempty"`
+
 		// signer fingerprints
 		SignerFingerprints []string `json:"signerFingerprints"`
 	}{
@@ -147,6 +158,8 @@ func (m PostureResponseProcessCreate) MarshalJSON() ([]byte, error) {
 		Hash: m.Hash,
 
 		IsRunning: m.IsRunning,
+
+		Path: m.Path,
 
 		SignerFingerprints: m.SignerFingerprints,
 	})
@@ -187,6 +200,28 @@ func (m *PostureResponseProcessCreate) Validate(formats strfmt.Registry) error {
 func (m *PostureResponseProcessCreate) validateID(formats strfmt.Registry) error {
 
 	if err := validate.Required("id", "body", m.ID()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ContextValidate validate this posture response process create based on the context it is used
+func (m *PostureResponseProcessCreate) ContextValidate(ctx context.Context, formats strfmt.Registry) error {
+	var res []error
+
+	if len(res) > 0 {
+		return errors.CompositeValidationError(res...)
+	}
+	return nil
+}
+
+func (m *PostureResponseProcessCreate) contextValidateTypeID(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := m.TypeID().ContextValidate(ctx, formats); err != nil {
+		if ve, ok := err.(*errors.Validation); ok {
+			return ve.ValidateName("typeId")
+		}
 		return err
 	}
 
