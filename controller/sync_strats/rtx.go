@@ -32,28 +32,30 @@ import (
 // to asynchronously buffer and send messages to an Edge Router via Start() then Send()
 type RouterSender struct {
 	env.RouterState
-	Id         string
-	EdgeRouter *model.EdgeRouter
-	Router     *network.Router
-	send       chan *channel2.Message
-	stop       chan interface{}
-	running    concurrenz.AtomicBoolean
-	stopping   concurrenz.AtomicBoolean
+	Id          string
+	EdgeRouter  *model.EdgeRouter
+	Router      *network.Router
+	send        chan *channel2.Message
+	closeNotify chan struct{}
+	running     concurrenz.AtomicBoolean
 
 	sync.Mutex
 }
 
 func newRouterSender(edgeRouter *model.EdgeRouter, router *network.Router, sendBufferSize int) *RouterSender {
-	return &RouterSender{
+	rtx := &RouterSender{
 		Id:          eid.New(),
 		EdgeRouter:  edgeRouter,
 		Router:      router,
 		send:        make(chan *channel2.Message, sendBufferSize),
-		stop:        make(chan interface{}, 0),
-		running:     concurrenz.AtomicBoolean(0),
-		stopping:    concurrenz.AtomicBoolean(0),
+		closeNotify: make(chan struct{}, 0),
+		running:     concurrenz.AtomicBoolean(1),
 		RouterState: env.NewLockingRouterStatus(),
 	}
+
+	go rtx.run()
+
+	return rtx
 }
 
 func (rtx *RouterSender) GetState() env.RouterStateValues {
@@ -64,26 +66,16 @@ func (rtx *RouterSender) GetState() env.RouterStateValues {
 	return rtx.Values()
 }
 
-func (rtx *RouterSender) Start() {
-	if rtx.running.CompareAndSwap(false, true) {
-		go rtx.run()
-	}
-}
-
 func (rtx *RouterSender) Stop() {
-	if rtx.stopping.CompareAndSwap(false, true) {
-		go func() {
-			rtx.stop <- struct{}{}
-		}()
+	if rtx.running.CompareAndSwap(true, false) {
+		close(rtx.closeNotify)
 	}
 }
 
 func (rtx *RouterSender) run() {
 	for {
 		select {
-		case <-rtx.stop:
-			rtx.running.Set(false)
-			rtx.stopping.Set(false)
+		case <-rtx.closeNotify:
 			return
 		case msg := <-rtx.send:
 			if !rtx.Router.Control.IsClosed() {
@@ -103,7 +95,26 @@ func (rtx *RouterSender) logger() *logrus.Entry {
 }
 
 func (rtx *RouterSender) Send(msg *channel2.Message) {
-	rtx.send <- msg
+	if !rtx.running.Get() {
+		pfxlog.Logger().Errorf("cannot send to router [%s], rtx'er is stopped", rtx.Router.Id)
+		return
+	}
+
+	if rtx.Router.Control.IsClosed() {
+		pfxlog.Logger().Errorf("cannot send to router [%s], rtx's channel is closed", rtx.Router.Id)
+		rtx.Stop()
+		return
+	}
+
+	select {
+	case rtx.send <- msg:
+	case <-rtx.closeNotify:
+	}
+
+}
+
+func (rtx *RouterSender) IsConnected() bool {
+	return !rtx.Router.Control.IsClosed()
 }
 
 // Map used make working with internal RouterSender easier as sync.Map accepts and returns interface{}
@@ -113,7 +124,6 @@ type routerTxMap struct {
 
 func (m *routerTxMap) Add(id string, routerMessageTxer *RouterSender) {
 	m.internalMap.Store(id, routerMessageTxer)
-	routerMessageTxer.Start()
 }
 
 func (m *routerTxMap) Get(id string) *RouterSender {
@@ -137,21 +147,23 @@ func (m *routerTxMap) Remove(id string) {
 	}
 }
 
-func (m *routerTxMap) Range(f func(entries *RouterSender) bool) {
+// Range creates a snapshot of the rtx's to loop over and will execute callback
+// with each rtx.
+func (m *routerTxMap) Range(callback func(entries *RouterSender) bool) {
+	var rtxs []*RouterSender
+
 	m.internalMap.Range(func(edgeRouterId, value interface{}) bool {
 		if rtx, ok := value.(*RouterSender); ok {
-			return f(rtx)
+			rtxs = append(rtxs, rtx)
+		} else {
+			pfxlog.Logger().Errorf("could not convert edge router entry got %t: %v", value, value)
 		}
-		pfxlog.Logger().Panic("could not convert edge router entry")
+
 		return false
 	})
-}
 
-// Helper to generate channel2.ReceiveHandler instances from a contentType and function
-func newReceiveHandlerFunc(contentType int32, handler func(m *channel2.Message, ch channel2.Channel)) channel2.ReceiveHandler {
-	return receiveHandlerFunc{
-		contentType: contentType,
-		handler:     handler,
+	for _, rtx := range rtxs {
+		callback(rtx)
 	}
 }
 
