@@ -36,7 +36,7 @@ require (
 	github.com/lucsky/cuid v1.2.0
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mdlayher/netlink v1.4.1
-	github.com/michaelquigley/pfxlog v0.3.7
+	github.com/michaelquigley/pfxlog v0.5.0
 	github.com/miekg/dns v1.1.43
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/netfoundry/secretstream v0.1.2
@@ -54,7 +54,7 @@ require (
 	github.com/teris-io/shortid v0.0.0-20171029131806-771a37caa5cf
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.etcd.io/bbolt v1.3.5-0.20200615073812-232d8fc87f50
-	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
+	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e
 	golang.org/x/net v0.0.0-20210525063256-abc453219eb5
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1
